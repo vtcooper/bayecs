@@ -2,7 +2,7 @@
 
 # 1. Introduction
 
-This is a Stan-based approach for calculating the posterior distributions of ECS from [Sherwood, Webb et al. 2020](https://doi.org/10.1029/2019RG000678) (hereafter SW20). The original code is slow, taking $\mathcal{O}\!\left(10\;\text{hrs}\right)$ to calculate a full posterior. The Stan implementation brings it down to $\mathcal{O}\!\left(10\;\text{secs}\right)$.
+This is a Stan-based approach for calculating the posterior distributions of ECS from [Sherwood, Webb et al. 2020](https://doi.org/10.1029/2019RG000678) (hereafter SW20). The original code is slow, taking $\mathcal{O}\left(10\;\text{hrs}\right)$ to calculate a full posterior. The Stan implementation brings it down to $\mathcal{O}\left(10\;\text{secs}\right)$.
 
 By refactoring the posterior calculation in Stan we hope to achieve two goals: 
 1. increase the speed by two orders of magnitude taking advantage of Stan's Hamiltonian Monte Carlo (HMC) sampler
@@ -15,7 +15,7 @@ conda env create -f stan.yml
 conda activate stan
 ```
 ### Difference from SW20:
-There is only one (intentional) difference from SW20's model. Our model does not account for the correlation between historical forcing ($F_{hist}$) and the forcing associatd with a doubling of CO$_2$  $(F_{2\times\text{CO}_2})$. I tried implementing this correlation and it resulted in very small differences in the posterior  of <0.05K at all percentiles (consistent with SW20), but sacrificed code simplicity and ease of reading. 
+There is only one (intentional) difference from SW20's model. Our model does not account for the correlation between historical forcing ($F_{hist}$) and the forcing associatd with a doubling of CO$_2$  $(F_{2\times CO_2})$. I tried implementing this correlation and it resulted in very small differences in the posterior  of <0.05K at all percentiles (consistent with SW20), but sacrificed code simplicity and ease of reading. 
 
 ### Colab:
 A Google colab version of the code can be found here. The colab version may be several commits behind the repository, and is primarily intended as a frictionless demo that does not require installing a new python environment. 
@@ -46,19 +46,19 @@ If, say, the probabilities of $y_{1},y_{2},\theta_{1},\theta_{2}$
 are Gaussian, we could also write this Bayesian model as
 
 $$
-y_{1}\mid\theta_{1},\theta_{2}\sim\mathcal{N}\!\left(\mu_{y_{1}}(\theta_{1},\theta_{2}),\;\sigma_{y_{1}}\!\left(\theta_{1},\theta_{2}\right)\right)
+y_{1}\mid\theta_{1},\theta_{2}\sim\mathcal{N} \left(\mu_{y_{1}}(\theta_{1},\theta_{2}),\;\sigma_{y_{1}} \left(\theta_{1},\theta_{2}\right)\right)
 $$
 
 $$
-y_{2}\mid\theta_{1},\theta_{2}\sim\mathcal{N}\!\left(\mu_{y_{2}}(\theta_{1},\theta_{2}),\;\sigma_{y_{2}}\!\left(\theta_{1},\theta_{2}\right)\right)
+y_{2}\mid\theta_{1},\theta_{2}\sim\mathcal{N} \left(\mu_{y_{2}}(\theta_{1},\theta_{2}),\;\sigma_{y_{2}} \left(\theta_{1},\theta_{2}\right)\right)
 $$
 
 $$
-\theta_{1}\sim\mathcal{N}\!\left(\mu_{\theta_{1}},\sigma_{\theta_{1}}\right)
+\theta_{1}\sim\mathcal{N} \left(\mu_{\theta_{1}},\sigma_{\theta_{1}}\right)
 $$
 
 $$
-\theta_{2}\sim\mathcal{N}\!\left(\mu_{\theta_{2}},\sigma_{\theta_{2}}\right).
+\theta_{2}\sim\mathcal{N} \left(\mu_{\theta_{2}},\sigma_{\theta_{2}}\right).
 $$
 
 Stan uses two possible formulations. The simplest form of the syntax
@@ -69,21 +69,26 @@ In the back-end, each distributional statement adds to the log-likelihood.
 For example, since $\theta_{1}$ has a Gaussian distribution,
 
 $$
-p_{\theta_{1}}(\theta_{1})=\left(2\pi\sigma_{\theta_{1}}^{2}\right)^{-1/2}\exp\!\left(-\frac{1}{2}\frac{\left(\theta_{1}-\mu_{\theta_{1}}\right)^{2}}{\sigma_{\theta_{1}}^{2}}\right)
+p_{\theta_{1}}(\theta_{1})=\left(2\pi\sigma_{\theta_{1}}^{2}\right)^{-1/2}\exp \left(-\frac{1}{2}\frac{\left(\theta_{1}-\mu_{\theta_{1}}\right)^{2}}{\sigma_{\theta_{1}}^{2}}\right)
 $$
+
 $$
-\log p_{\theta_{1}}(\theta_{1})=-\frac{1}{2}\log\!\left(2\pi\right)-\log\sigma_{\theta_{1}}-\frac{1}{2}\frac{\left(\theta_{1}-\mu_{\theta_{1}}\right)^{2}}{\sigma_{\theta_{1}}^{2}}
+\log p_{\theta_{1}}(\theta_{1})=-\frac{1}{2}\log \left(2\pi\right)-\log\sigma_{\theta_{1}}-\frac{1}{2}\frac{\left(\theta_{1}-\mu_{\theta_{1}}\right)^{2}}{\sigma_{\theta_{1}}^{2}}
 $$
 
 The distributional statement
+
 $$
-\theta_{1}\sim\mathcal{N}\!\left(\mu_{\theta_{1}},\sigma_{\theta_{1}}\right)
+\theta_{1}\sim\mathcal{N} \left(\mu_{\theta_{1}},\sigma_{\theta_{1}}\right)
 $$
+
 is equivalent to adding $\log p_{\theta_{1}}(\theta_{1})$ to the
 log-posterior (the `target`, in Stan language),
+
 $$
 \log\mathcal{L}=\log\mathcal{L}+\log p_{\theta_{1}}(\theta_{1}).
 $$
+
 We can also directly add to log-posterior, and we will need to do that
 to account for a change of variables if we want to go from uniform
 $S$ to uniform $\lambda$ priors without having to change the model structure. 
@@ -98,38 +103,38 @@ the independence ansatz (eq. 11), the posterior for climate sensitivity,
 $S$, is:
 
 $$
-p(S\mid E_{\text{proc}},E_{\text{hist}},E_{\text{paleo}})\propto p\!\left(E_{\text{proc}}\mid S\right)\,p\!\left(E_{\text{hist}}\mid S\right)\,p\!\left(E_{\text{LGM}}\mid S\right)\,p\!\left(E_{\text{plio}}\mid S\right)\,p_{S}(S)
+p(S\mid E_{\text{proc}},E_{\text{hist}},E_{\text{paleo}})\propto p \left(E_{\text{proc}}\mid S\right)\,p \left(E_{\text{hist}}\mid S\right)\,p \left(E_{\text{LGM}}\mid S\right)\,p \left(E_{\text{plio}}\mid S\right)\,p_{S}(S)
 $$
 
 $$
-p(S\mid E_{\text{proc}},E_{\text{hist}},E_{\text{paleo}})\propto\mathcal{L}_{\text{proc}}\!\left(S\right)\mathcal{L}_{\text{hist}}\!\left(S\right)\mathcal{L}_{\text{LGM}}\!\left(S\right)\mathcal{L}_{\text{plio}}\!\left(S\right)p_{S}(S)
+p(S\mid E_{\text{proc}},E_{\text{hist}},E_{\text{paleo}})\propto\mathcal{L}_{\text{proc}} \left(S\right)\mathcal{L}_{\text{hist}} \left(S\right)\mathcal{L}_{\text{LGM}} \left(S\right)\mathcal{L}_{\text{plio}} \left(S\right)p_{S}(S)
 $$
 
 The parameters and their coupling equations are as follows:
 
-- **Shared parameters:** $S$, $F_{2\times\mathrm{CO}_{2}}$, $\zeta$, with the feedback
-  parameter defined as $\lambda=-F_{2\times\mathrm{CO}_{2}}/S$.
+- **Shared parameters:** $S$, $F_{2\times}$, $\zeta$, with the feedback
+  parameter defined as $\lambda=-F_{2\times}/S$.
 - **Process** (sec. 3): $\lambda_{j}$, 11 feedback parameters, each
   with a Gaussian distribution.
 - **Historical** (sec. 4): $T_{\text{hist}}, F_{\text{hist}}, N_{\text{hist}}, \Delta\lambda$, coupled
   through equation 6,
 
   $$
-  T_{\text{hist}}=\frac{-\!\left(F_{\text{hist}}-N_{\text{hist}}\right)}{\lambda-\Delta\lambda}.
+  T_{\text{hist}}=\frac{- \left(F_{\text{hist}}-N_{\text{hist}}\right)}{\lambda-\Delta\lambda}.
   $$
 
 - **Cold past climates** (sec. 5.2.2): $F_{\text{LGM}}, T_{\text{LGM}}, \alpha, \zeta$,
   coupled through equation 22,
 
   $$
-  F_{\text{LGM}}=0.57\cdot F_{2\times\mathrm{CO}_{2}}-T_{\text{LGM}}\!\left(\frac{\lambda}{1+\zeta}+\frac{\alpha}{2}T_{\text{LGM}}\right).
+  F_{\text{LGM}}=0.57\cdot F_{2\times\mathrm{CO}_{2}}-T_{\text{LGM}} \left(\frac{\lambda}{1+\zeta}+\frac{\alpha}{2}T_{\text{LGM}}\right).
   $$
 
 - **Warm past climates** (sec. 5.2.3): $F_{\text{plio}}, T_{\text{plio}}, f_{\text{CH}_4}, f_{\text{ESS}}$,
   coupled through equation 23,
 
   $$
-  T_{\text{plio}}=\frac{-F_{\text{plio}}\cdot\!\left(1+f_{\text{CH}_4}\right)\!\cdot\!\left(1+f_{\text{ESS}}\right)}{\lambda/(1+\zeta)}.
+  T_{\text{plio}}=\frac{-F_{\text{plio}}\cdot \left(1+f_{\text{CH}_4}\right) \cdot \left(1+f_{\text{ESS}}\right)}{\lambda/(1+\zeta)}.
   $$
 
 ### 3.2 Nuisance parameters, primary parameters, and constrained parameters
@@ -138,13 +143,13 @@ A Bayesian calculation computes the probability of parameters, $\theta$,
 given observations $y$:
 
 $$
-p(\theta\mid y)\propto p\!\left(y\mid\theta\right)p(\theta).
+p(\theta\mid y)\propto p \left(y\mid\theta\right)p(\theta).
 $$
 
 The SW20 framework is unusual in that it does not provide data points
 $y_{j}$ that can be evaluated by plugging them into a parametric likelihood.
 Rather, it provides distributions of the likelihoods for different
-lines of evidence, $p\!\left(E_{i}\mid S\right)$, that are written in terms
+lines of evidence, $p \left(E_{i}\mid S\right)$, that are written in terms
 of the distributions of certain variables (e.g. $T_{\text{hist}}, F_{\text{hist}}, N_{\text{hist}}, \Delta\lambda$
 for the historical evidence). These distributions need to be interpreted
 as likelihoods rather than frequentist sample distributions (see also
@@ -153,7 +158,7 @@ For a Bayesian calculation we need to write a likelihood as a probability
 of the evidence conditional on the parameter $S$ we want to estimate:
 
 $$
-\mathcal{L}_{\text{hist}}\!\left(S\right)=p\!\left(E_{\text{hist}}\mid S\right).
+\mathcal{L}_{\text{hist}} \left(S\right)=p \left(E_{\text{hist}}\mid S\right).
 $$
 
 However, SW20 does not provide data points, but rather distributions
@@ -162,7 +167,7 @@ likelihood of the historical evidence can be written as the likelihood
 of a given combination of variables:
 
 $$
-\mathcal{L}_{\text{hist}}\!\left(S\right)=p\!\left(E_{\text{hist}}\mid S\right)=p(T_{\text{hist}},N_{\text{hist}},F_{\text{hist}},\Delta\lambda).
+\mathcal{L}_{\text{hist}} \left(S\right)=p \left(E_{\text{hist}}\mid S\right)=p(T_{\text{hist}},N_{\text{hist}},F_{\text{hist}},\Delta\lambda).
 $$
 
 Thus $\left(T_{\text{hist}},N_{\text{hist}},F_{\text{hist}},\Delta\lambda\right)$ are
@@ -179,18 +184,18 @@ the others. For example, if we choose temperature as the dependent
 variable, we can write
 
 $$
-T(F,N,\Delta\lambda,S)=\frac{-\!\left(F-N\right)}{\lambda-\Delta\lambda}=\frac{-\!\left(F-N\right)}{-F_{2\times}/S-\Delta\lambda}.
+T(F,N,\Delta\lambda,S)=\frac{- \left(F-N\right)}{\lambda-\Delta\lambda}=\frac{- \left(F-N\right)}{-F_{2\times}/S-\Delta\lambda}.
 $$
 
 So we can write temperature as a function of $\lambda$ or of $S, F_{2\times}$
 and write the likelihood as:
 
 $$
-p\!\left(T,N,F,\Delta\lambda\mid S,F_{2\times}\right)=p(T\mid S,F_{2\times})\,p(N)\,p(F)\,p(\Delta\lambda)
+p \left(T,N,F,\Delta\lambda\mid S,F_{2\times}\right)=p(T\mid S,F_{2\times})\,p(N)\,p(F)\,p(\Delta\lambda)
 $$
 
 $$
-\mathcal{L}=p\!\left(T,N,F,\Delta\lambda\mid S,F_{2\times}\right)\propto\exp\!\left[-\frac{\left(\frac{-\left(F-N\right)}{-F_{2\times}/S-\Delta\lambda}-\mu_{T}\right)^{2}}{2\sigma_{T}^{2}}\right]\exp\!\left[-\frac{\left(N-\mu_{N}\right)^{2}}{2\sigma_{N}^{2}}\right]\exp\!\left[-\frac{\left(\Delta\lambda-\mu_{\Delta\lambda}\right)^{2}}{2\sigma_{\Delta\lambda}^{2}}\right]\exp\!\left[-\frac{\left(F-\mu_{F}\right)^{2}}{2\sigma_{F}^{2}}\right].
+\mathcal{L}=p \left(T,N,F,\Delta\lambda\mid S,F_{2\times}\right)\propto\exp \left[-\frac{\left(\frac{-\left(F-N\right)}{-F_{2\times}/S-\Delta\lambda}-\mu_{T}\right)^{2}}{2\sigma_{T}^{2}}\right]\exp \left[-\frac{\left(N-\mu_{N}\right)^{2}}{2\sigma_{N}^{2}}\right]\exp \left[-\frac{\left(\Delta\lambda-\mu_{\Delta\lambda}\right)^{2}}{2\sigma_{\Delta\lambda}^{2}}\right]\exp \left[-\frac{\left(F-\mu_{F}\right)^{2}}{2\sigma_{F}^{2}}\right].
 $$
 
 Thus temperature is now a *constrained* parameter that is a deterministic
@@ -208,11 +213,11 @@ or even $\Delta\lambda$ instead.
 
 $$
 \begin{aligned}
-p(S\mid E) & \propto\mathcal{L}_{\text{proc}}\!\left(S\right)\mathcal{L}_{\text{hist}}\!\left(S\right)\mathcal{L}_{\text{LGM}}\!\left(S\right)\mathcal{L}_{\text{plio}}\!\left(S\right)\,p(\zeta)\,p(F_{2\times})\,p_{S}(S)\\
+p(S\mid E) & \propto\mathcal{L}_{\text{proc}} \left(S\right)\mathcal{L}_{\text{hist}} \left(S\right)\mathcal{L}_{\text{LGM}} \left(S\right)\mathcal{L}_{\text{plio}} \left(S\right)\,p(\zeta)\,p(F_{2\times})\,p_{S}(S)\\
 \mathcal{L}_{\text{proc}} & =p(\lambda\mid S,F_{2\times})\\
-\mathcal{L}_{\text{hist}} & =p\!\left(T_{\text{hist}}\mid S,N_{\text{hist}},\Delta\lambda,F_{\text{hist}}\right)\,p\!\left(N_{\text{hist}}\right)\,p\!\left(F_{\text{hist}}\right)\,p(\Delta\lambda)\\
-\mathcal{L}_{\text{LGM}} & =p\!\left(F_{\text{LGM}}\mid S,T_{\text{LGM}},\zeta,\alpha\right)\,p\!\left(T_{\text{LGM}}\right)\,p(\alpha)\\
-\mathcal{L}_{\text{plio}} & =p\!\left(T_{\text{plio}}\mid S,F_{\text{plio}},f_{\text{ESS}},f_{\text{CH}_4}\right)\,p(F_{\text{plio}})\,p\!\left(f_{\text{ESS}}\right)\,p(f_{\text{CH}_4})
+\mathcal{L}_{\text{hist}} & =p \left(T_{\text{hist}}\mid S,N_{\text{hist}},\Delta\lambda,F_{\text{hist}}\right)\,p \left(N_{\text{hist}}\right)\,p \left(F_{\text{hist}}\right)\,p(\Delta\lambda)\\
+\mathcal{L}_{\text{LGM}} & =p \left(F_{\text{LGM}}\mid S,T_{\text{LGM}},\zeta,\alpha\right)\,p \left(T_{\text{LGM}}\right)\,p(\alpha)\\
+\mathcal{L}_{\text{plio}} & =p \left(T_{\text{plio}}\mid S,F_{\text{plio}},f_{\text{ESS}},f_{\text{CH}_4}\right)\,p(F_{\text{plio}})\,p \left(f_{\text{ESS}}\right)\,p(f_{\text{CH}_4})
 \end{aligned}
 $$
 
@@ -226,11 +231,11 @@ of the parameters becomes the constrained parameter. For example, the
 following two formulations for the historical likelihood are equivalent:
 
 $$
-\mathcal{L}_{\text{hist}}\!\left(S\right)=p(T\mid S,F_{2\times})\,p(N)\,p(F)\,p(\Delta\lambda); \quad\text{with}\quad T=\frac{-\left(F-N\right)}{\lambda-\Delta\lambda}=\frac{-\left(F-N\right)}{-F_{2\times}/S-\Delta\lambda}
+\mathcal{L}_{\text{hist}} \left(S\right)=p(T\mid S,F_{2\times})\,p(N)\,p(F)\,p(\Delta\lambda); \quad\text{with}\quad T=\frac{-\left(F-N\right)}{\lambda-\Delta\lambda}=\frac{-\left(F-N\right)}{-F_{2\times}/S-\Delta\lambda}
 $$
 
 $$
-\mathcal{L}_{\text{hist}}\!\left(S\right)=p(N\mid S,F_{2\times})\,p(T)\,p(F)\,p(\Delta\lambda); \quad\text{with}\quad N=F-T\!\left(-F_{2\times}/S-\Delta\lambda\right).
+\mathcal{L}_{\text{hist}} \left(S\right)=p(N\mid S,F_{2\times})\,p(T)\,p(F)\,p(\Delta\lambda); \quad\text{with}\quad N=F-T \left(-F_{2\times}/S-\Delta\lambda\right).
 $$
 
 However, there are a couple of considerations that can help us decide
@@ -281,7 +286,7 @@ not only of the three parameters defined by the three coupling equations
 needed to write the likelihood, but also any other constrained
 parameter that might make the model formulation easier, or that we
 want to output. For example, we may want to define $\lambda=-F_{2\times}/S$
-or $F_{\text{plio}}=\log_2\!\left(\mathrm{CO}_{2,\text{plio}}/284\right)\cdot F_{2\times}$.
+or $F_{\text{plio}}=\log_2 \left(\mathrm{CO}_{2,\text{plio}}/284\right)\cdot F_{2\times}$.
 In this model formulation, I've chosen $T_{\text{hist}}$, $F_{\text{LGM}}$, and $T_{\text{plio}}$.
 Any other formulation that does not violate rules 1 and 2 should work.
 
@@ -294,8 +299,8 @@ two half-Gaussians glued at $\mu_{F}$,
 
 $$
 p_{F}(F)\;=\;\begin{cases}
-\dfrac{1}{\sigma_{\text{lo}}\sqrt{2\pi}}\exp\!\Big(-\tfrac{1}{2}\big(\tfrac{F-\mu_{F}}{\sigma_{\text{lo}}}\big)^{2}\Big), & F<\mu_{F},\\[8pt]
-\dfrac{1}{\sigma_{\text{hi}}\sqrt{2\pi}}\exp\!\Big(-\tfrac{1}{2}\big(\tfrac{F-\mu_{F}}{\sigma_{\text{hi}}}\big)^{2}\Big), & F\ge\mu_{F},
+\dfrac{1}{\sigma_{\text{lo}}\sqrt{2\pi}}\exp \Big(-\tfrac{1}{2}\big(\tfrac{F-\mu_{F}}{\sigma_{\text{lo}}}\big)^{2}\Big), & F<\mu_{F},\\[8pt]
+\dfrac{1}{\sigma_{\text{hi}}\sqrt{2\pi}}\exp \Big(-\tfrac{1}{2}\big(\tfrac{F-\mu_{F}}{\sigma_{\text{hi}}}\big)^{2}\Big), & F\ge\mu_{F},
 \end{cases}\qquad\sigma_{\text{lo}}=1.131,\;\sigma_{\text{hi}}=0.535.
 $$
 
@@ -304,7 +309,7 @@ PDF, but it is discontinuous at $F=\mu_F$, where the log-density jumps
 by
 
 $$
-\Delta\log p_{F}\;=\;\log\!\bigl(\sigma_{\text{lo}}/\sigma_{\text{hi}}\bigr)\;\approx\;0.747.
+\Delta\log p_{F}\;=\;\log \bigl(\sigma_{\text{lo}}/\sigma_{\text{hi}}\bigr)\;\approx\;0.747.
 $$
 
 HMC's leapfrog integrator assumes a continuously differentiable target,
@@ -325,7 +330,7 @@ Section 4.2: for $F<\mu_{F}$, we have $z=(F-\mu_{F})/\sigma_{\text{lo}}$
 and $\lvert\mathrm{d}F/\mathrm{d}z\rvert=\sigma_{\text{lo}}$, so
 
 $$
-p(F)\;=\;\frac{p_{z}(z)}{\lvert\mathrm{d}F/\mathrm{d}z\rvert}\;=\;\frac{1}{\sigma_{\text{lo}}\sqrt{2\pi}}\exp\!\Bigl(-\tfrac{1}{2}\bigl(\tfrac{F-\mu_{F}}{\sigma_{\text{lo}}}\bigr)^{2}\Bigr)
+p(F)\;=\;\frac{p_{z}(z)}{\lvert\mathrm{d}F/\mathrm{d}z\rvert}\;=\;\frac{1}{\sigma_{\text{lo}}\sqrt{2\pi}}\exp \Bigl(-\tfrac{1}{2}\bigl(\tfrac{F-\mu_{F}}{\sigma_{\text{lo}}}\bigr)^{2}\Bigr)
 $$
 
 and analogously on the other side. Critically, in the *sampling
@@ -353,7 +358,7 @@ $$
 The implicit prior on $(\lambda,F_{2\times})$ is then
 
 $$
-p(\lambda,F_{2\times})=p_{S}\!\left(S(\lambda,F_{2\times})\right)\,\frac{\partial S}{\partial\lambda}\bigg|_{F_{2\times}}\,p_{F_{2\times}}(F_{2\times})\;=\;p_{S}\!\left(S(\lambda,F_{2\times})\right)\cdot\frac{F_{2\times}}{\lambda^{2}}\cdot p_{F_{2\times}}(F_{2\times})\;\propto\;\frac{F_{2\times}}{\lambda^{2}}\,p_{F_{2\times}}(F_{2\times}),
+p(\lambda,F_{2\times})=p_{S} \left(S(\lambda,F_{2\times})\right)\,\frac{\partial S}{\partial\lambda}\bigg|_{F_{2\times}}\,p_{F_{2\times}}(F_{2\times})\;=\;p_{S} \left(S(\lambda,F_{2\times})\right)\cdot\frac{F_{2\times}}{\lambda^{2}}\cdot p_{F_{2\times}}(F_{2\times})\;\propto\;\frac{F_{2\times}}{\lambda^{2}}\,p_{F_{2\times}}(F_{2\times}),
 $$
 
 i.e. *non-uniform* in $\lambda$ at fixed $F_{2\times}$. This
