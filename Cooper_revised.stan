@@ -121,7 +121,7 @@ data {
 parameters {
     // The sampling space: the independent parameters that are Monte Carlo sampled
     real <lower=0.1, upper=20> S;
-    real F_2xCO2;
+    real<lower=0> F_2xCO2;
     real zeta;
 
     // historical nuisance parameters

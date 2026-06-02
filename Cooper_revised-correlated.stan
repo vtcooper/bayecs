@@ -9,10 +9,12 @@
                 (sec. 4, eq. 6):
                 N = F + T*(lambda - dlambda).
       L_LGM     Last Glacial Maximum (sec. 5.2.2, eq. 22):
-                F_LGM = 0.57*F_2xCO2 - T_LGM*(lambda/(1+zeta) + alpha/2*T_LGM).
+                T_LGM = (F_other_LGM - 0.57*F_2xCO2)
+                        / (dlambda_LGM - lambda/(1+zeta)).
       L_plio    mid-Pliocene Warm Period (sec. 5.2.3, eq. 23):
-                T_plio = -F_plio*(1+fCH4)*(1+fESS) / (lambda/(1+zeta)),
-                where F_plio = log2(CO2_plio/284) * F_2xCO2.
+                T_plio = (-F_plio_CO2*(1+fCH4) - F_plio_nonGHG)
+                         / (lambda/(1+zeta) - dlambda_plio),
+                where F_plio_CO2 = log2(CO2_plio/284) * F_2xCO2.
 
     Shared parameters: S, F_2xCO2, zeta.
 
@@ -35,16 +37,6 @@
     
     In practice, the easiest way to do this is to add the scaling to the unnormalized joint posterior:
         target += log(F_2xCO2) - 2*log(S);
-
-    --- discontinuity in F_hist -----------------------------------------------
-
-    F_hist has an asymmetric Gaussian likelihood (sigma_low for F<mu_F,
-    sigma_high for F>=mu_F).  Sampling F_hist directly through Stan's
-    `~ normal()` shorthand creates a finite log-density jump at F=mu_F that
-    biases HMC.  We sample an unconstrained z-score F_z ~ N(0,1) and define
-    F_hist = mu_F + F_z * sigma(sign(F_z)) as a transformed parameter; this
-    induces exactly the same asymmetric distribution but is smooth in
-    sampling space.
 
     --- note: F_hist / F_2xCO2 correlation, explored and not implemented -----
 
@@ -89,8 +81,7 @@ data {
     real<lower=0> sig_N_hist;
 
     real          mu_F_hist;
-    real<lower=0> sig_F_hist_low;
-    real<lower=0> sig_F_hist_high;
+    real<lower=0> sig_F_hist;
 
     real          mu_dlambda;
     real<lower=0> sig_dlambda;
@@ -99,11 +90,14 @@ data {
     real          mu_T_LGM;
     real<lower=0> sig_T_LGM;
 
-    real          mu_F_LGM;
-    real<lower=0> sig_F_LGM;
+    real          mu_F_other_LGM;
+    real<lower=0> sig_F_other_LGM;
 
-    real          mu_alpha;
-    real<lower=0> sig_alpha;
+    real          mu_dlambda_LGM;
+    real<lower=0> sig_dlambda_LGM;
+
+    // real          mu_alpha;
+    // real<lower=0> sig_alpha;
 
     // ---- Pliocene (Sherwood Table 8) ----
     real          mu_T_plio;
@@ -112,11 +106,19 @@ data {
     real          mu_CO2_plio;
     real<lower=0> sig_CO2_plio;
 
+    real          mu_F_plio_nonGHG;
+    real<lower=0> sig_F_plio_nonGHG;
+
+    real          mu_dlambda_plio;
+    real<lower=0> sig_dlambda_plio;
+
+    real<lower=-1, upper=1> rho_dlambda_LGM_plio;
+
     real          mu_fCH4;
     real<lower=0> sig_fCH4;
 
-    real          mu_fESS;
-    real<lower=0> sig_fESS;
+    // real          mu_fESS;
+    // real<lower=0> sig_fESS;
 }
 parameters {
     // The sampling space: the independent parameters that are Monte Carlo sampled
@@ -125,49 +127,47 @@ parameters {
     real zeta;
 
     // historical nuisance parameters
-    real F_z; 
+    real F_hist;
     real T_hist;
     real dlambda;
 
     // LGM nuisance
-    real <upper=0> T_LGM;
-    real alpha;
+    // real <upper=0> T_LGM;
+    real F_other_LGM;
+    real dlambda_LGM;
+    // real alpha;
 
     // Pliocene nuisance
     real <lower=0> CO2_plio;
+    real F_plio_nonGHG;
+    real dlambda_plio;
     real fCH4;
-    real fESS;
+    // real fESS;
 }
 transformed parameters{
 
     // These are dependent parameters that are a function of the independent parameters
     real l;        // lambda
     real N_hist;
-    real F_LGM;
-    real F_plio;
+    real T_LGM;
+    real F_plio_CO2;
     real T_plio;
-
-    //historical forcing is independnt but needs to be reparameterized
-    // so that it is smooth in sampling space ()
-    real F_hist;
-    
 
     // parameter formulas
     
     // feedback 
     l       = -F_2xCO2 / S;
 
-    // reparameterizing historical forcing
-    F_hist  = F_z < 0 ? mu_F_hist + F_z * sig_F_hist_low
-                      : mu_F_hist + F_z * sig_F_hist_high;
-                      
-    // historical coupling equation
+    // coupling equations
     N_hist  = F_hist + T_hist * (l-dlambda);
 
-    F_LGM   = 0.57*F_2xCO2 - T_LGM*(l/(1+zeta) + alpha/2*T_LGM);
+    // F_other_LGM   = 0.57*F_2xCO2 - T_LGM*(l/(1+zeta) + alpha/2*T_LGM); OLD VERSION
+    // F_other_LGM   = 0.57*F_2xCO2 - T_LGM*(l/(1+zeta) - dlambda_LGM);
+    T_LGM = (F_other_LGM - 0.57*F_2xCO2) / (dlambda_LGM - l/(1 + zeta));
 
-    F_plio  = log(CO2_plio/284) / log(2) * F_2xCO2;
-    T_plio  = (-F_plio*(1+fCH4)*(1+fESS)) / (l/(1+zeta));
+    F_plio_CO2  = log(CO2_plio/284) / log(2) * F_2xCO2;
+    // T_plio  = (-F_plio_CO2*(1+fCH4)*(1+fESS)) / (l/(1+zeta)); OLD VERSION
+    T_plio  = (-F_plio_CO2*(1+fCH4) - F_plio_nonGHG) / (l/(1+zeta) - dlambda_plio);
 }
 model {
     // Shared
@@ -178,21 +178,41 @@ model {
     l ~ normal(mu_lambda, sig_lambda);
 
     // Historical
-    F_z     ~ std_normal();
+    F_hist  ~ normal(mu_F_hist, sig_F_hist);
     T_hist  ~ normal(mu_T_hist , sig_T_hist);
     N_hist  ~ normal(mu_N_hist , sig_N_hist);
     dlambda ~ normal(mu_dlambda, sig_dlambda);
 
     // LGM
-    T_LGM   ~ normal(mu_T_LGM, sig_T_LGM);
-    alpha   ~ normal(mu_alpha, sig_alpha);
-    F_LGM   ~ normal(mu_F_LGM, sig_F_LGM);
+    T_LGM       ~ normal(mu_T_LGM, sig_T_LGM);
+    F_other_LGM ~ normal(mu_F_other_LGM, sig_F_other_LGM);
 
     // Pliocene
-    CO2_plio ~ normal(mu_CO2_plio, sig_CO2_plio);
-    fCH4     ~ normal(mu_fCH4, sig_fCH4);
-    fESS     ~ normal(mu_fESS, sig_fESS);
-    T_plio   ~ normal(mu_T_plio, sig_T_plio);
+    T_plio        ~ normal(mu_T_plio, sig_T_plio);
+    CO2_plio      ~ normal(mu_CO2_plio, sig_CO2_plio);
+    fCH4          ~ normal(mu_fCH4, sig_fCH4);
+    F_plio_nonGHG ~ normal(mu_F_plio_nonGHG, sig_F_plio_nonGHG);
+    // fESS       ~ normal(mu_fESS, sig_fESS);
+
+    // Correlated LGM/Pliocene pattern-effect uncertainty
+    {
+        vector[2] dlambda_pair;
+        vector[2] mu_dlambda_pair;
+        matrix[2, 2] cov_dlambda_pair;
+
+        dlambda_pair[1] = dlambda_LGM;
+        dlambda_pair[2] = dlambda_plio;
+
+        mu_dlambda_pair[1] = mu_dlambda_LGM;
+        mu_dlambda_pair[2] = mu_dlambda_plio;
+
+        cov_dlambda_pair[1, 1] = square(sig_dlambda_LGM);
+        cov_dlambda_pair[2, 2] = square(sig_dlambda_plio);
+        cov_dlambda_pair[1, 2] = rho_dlambda_LGM_plio * sig_dlambda_LGM * sig_dlambda_plio;
+        cov_dlambda_pair[2, 1] = cov_dlambda_pair[1, 2];
+
+        dlambda_pair ~ multi_normal(mu_dlambda_pair, cov_dlambda_pair);
+    }
 
     // UL prior: convert from default (uniform-S) to uniform-lambda 
     // by multiplying by the Jacobian (or its inverse)
