@@ -12,4 +12,8 @@ dependencies:
   - scipy=1.11.4
   - cmdstanpy=1.2.1
   - xarray
+  - netcdf4
+  - h5netcdf
+  - h5py
+  - cftime
   - python=3.11
