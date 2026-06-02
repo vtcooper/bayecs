@@ -1,5 +1,7 @@
 # If you create this environment via conda ( conda env create -f stan.yml) all you need to do is create the environment and activate it - CmdStan comes prepackaged. 
 # If you install CmdStanPy via PyPi or Github you must install CmdStan. See here: https://mc-stan.org/cmdstanpy/installation.html
+
+# VTC added python=3.11; some packages may be incompatible w older python
 name: stan
 channels:
   - conda-forge
@@ -10,3 +12,4 @@ dependencies:
   - scipy=1.11.4
   - cmdstanpy=1.2.1
   - xarray
+  - python=3.11
