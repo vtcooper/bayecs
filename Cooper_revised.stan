@@ -36,16 +36,6 @@
     In practice, the easiest way to do this is to add the scaling to the unnormalized joint posterior:
         target += log(F_2xCO2) - 2*log(S);
 
-    --- discontinuity in F_hist -----------------------------------------------
-
-    F_hist has an asymmetric Gaussian likelihood (sigma_low for F<mu_F,
-    sigma_high for F>=mu_F).  Sampling F_hist directly through Stan's
-    `~ normal()` shorthand creates a finite log-density jump at F=mu_F that
-    biases HMC.  We sample an unconstrained z-score F_z ~ N(0,1) and define
-    F_hist = mu_F + F_z * sigma(sign(F_z)) as a transformed parameter; this
-    induces exactly the same asymmetric distribution but is smooth in
-    sampling space.
-
     --- note: F_hist / F_2xCO2 correlation, explored and not implemented -----
 
     Sherwood sec. 4.1.2 (p. 43) decomposes F_hist into a CO2 component (which
@@ -89,8 +79,7 @@ data {
     real<lower=0> sig_N_hist;
 
     real          mu_F_hist;
-    real<lower=0> sig_F_hist_low;
-    real<lower=0> sig_F_hist_high;
+    real<lower=0> sig_F_hist;
 
     real          mu_dlambda;
     real<lower=0> sig_dlambda;
@@ -125,7 +114,7 @@ parameters {
     real zeta;
 
     // historical nuisance parameters
-    real F_z; 
+    real F_hist;
     real T_hist;
     real dlambda;
 
@@ -147,20 +136,11 @@ transformed parameters{
     real F_plio;
     real T_plio;
 
-    //historical forcing is independnt but needs to be reparameterized
-    // so that it is smooth in sampling space ()
-    real F_hist;
-    
-
     // parameter formulas
     
     // feedback 
     l       = -F_2xCO2 / S;
 
-    // reparameterizing historical forcing
-    F_hist  = F_z < 0 ? mu_F_hist + F_z * sig_F_hist_low
-                      : mu_F_hist + F_z * sig_F_hist_high;
-                      
     // historical coupling equation
     N_hist  = F_hist + T_hist * (l-dlambda);
 
@@ -178,7 +158,7 @@ model {
     l ~ normal(mu_lambda, sig_lambda);
 
     // Historical
-    F_z     ~ std_normal();
+    F_hist  ~ normal(mu_F_hist, sig_F_hist);
     T_hist  ~ normal(mu_T_hist , sig_T_hist);
     N_hist  ~ normal(mu_N_hist , sig_N_hist);
     dlambda ~ normal(mu_dlambda, sig_dlambda);
