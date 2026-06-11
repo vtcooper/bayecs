@@ -10,7 +10,7 @@
                 N = F + T*(lambda - dlambda).
       L_LGM     Last Glacial Maximum budget residual:
                 N_LGM = F_other_LGM - 0.57*F_2xCO2
-                        - T_LGM*(dlambda_LGM - lambda/(1+zeta)).
+                        + T_LGM*(lambda/(1+zeta) - dlambda_LGM).
       L_plio    mid-Pliocene Warm Period budget residual:
                 N_plio = F_plio_CO2*(1+fCH4) + F_plio_nonGHG
                          + T_plio*(lambda/(1+zeta) - dlambda_plio),

@@ -7,7 +7,7 @@
                 sum of 11 component-feedback Gaussians (Table 1).
       L_hist    historical warming and TOA imbalance with pattern effect
                 (sec. 4, eq. 6):
-                N = F + T*(lambda - dlambda).
+                T_hist = (N_hist - F_hist) / (lambda - dlambda).
       L_LGM     Last Glacial Maximum (sec. 5.2.2, eq. 22):
                 T_LGM = (F_other_LGM - 0.57*F_2xCO2)
                         / (dlambda_LGM - lambda/(1+zeta)).
@@ -128,7 +128,7 @@ parameters {
 
     // historical nuisance parameters
     real F_hist;
-    real T_hist;
+    real N_hist;
     real dlambda;
 
     // LGM nuisance
@@ -148,7 +148,7 @@ transformed parameters{
 
     // These are dependent parameters that are a function of the independent parameters
     real l;        // lambda
-    real N_hist;
+    real T_hist;
     real T_LGM;
     real F_plio_CO2;
     real T_plio;
@@ -159,7 +159,7 @@ transformed parameters{
     l       = -F_2xCO2 / S;
 
     // coupling equations
-    N_hist  = F_hist + T_hist * (l-dlambda);
+    T_hist  = (N_hist - F_hist) / (l-dlambda);
 
     // F_other_LGM   = 0.57*F_2xCO2 - T_LGM*(l/(1+zeta) + alpha/2*T_LGM); OLD VERSION
     // F_other_LGM   = 0.57*F_2xCO2 - T_LGM*(l/(1+zeta) - dlambda_LGM);
