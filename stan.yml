@@ -19,4 +19,5 @@ dependencies:
   - h5netcdf
   - h5py
   - cftime
+  - seaborn
   - python=3.11
