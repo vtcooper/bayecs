@@ -1,0 +1,512 @@
+/*  Community ECS assessment model with data-selectable sensitivity options.
+
+    Core lines of evidence (based on sec. 7 of Sherwood et al. 2020):
+
+      L_proc    process understanding (sec. 3): aggregate Gaussian on the
+                total feedback parameter lambda = -F_2xCO2/S, derived as the
+                sum of 11 component-feedback Gaussians (Table 1).
+      L_hist    historical warming and TOA imbalance with pattern effect
+                (sec. 4, eq. 6):
+                N = F + T*(lambda - dlambda).
+                Historical forcing is decomposed as
+                F = F_CO2 + F_anthro_aerosol + F_other, with
+                F_CO2 proportional to the shared F_2xCO2 parameter.
+      L_trend   2006--2024 trends in temperature, effective radiative forcing,
+                and TOA imbalance:
+                N_trend = F_trend
+                          + T_trend*(lambda - dlambda_trend).
+                This sensitivity treats Trend as independent of L_hist and
+                the other lines of evidence, while retaining the assessed
+                covariance between the Trend T and N observations.
+                Included only when include_trend = 1.
+      L_LGM     Last Glacial Maximum budget residual:
+                N_LGM = F_other_LGM + f_CO2_LGM*F_2xCO2
+                        + T_LGM*(lambda/(1+zeta) - dlambda_LGM).
+                The signed dimensionless multiplier f_CO2_LGM is sampled,
+                so the LGM CO2 forcing inherits uncertainty from both the
+                shared F_2xCO2 and forcing state dependence.
+      L_plio    mid-Pliocene Warm Period budget residual:
+                N_plio = F_plio_CO2*(1+fCH4) + F_plio_nonGHG
+                         + T_plio*(lambda/(1+zeta) - dlambda_plio),
+                where F_plio_CO2 is the Meinshausen et al. (2020) CO2
+                concentration-forcing ratio times the shared F_2xCO2.
+
+    Sampled shared parameters: lambda, F_2xCO2, zeta. ECS is retained as the
+    transformed output S = -F_2xCO2/lambda.
+
+    Model switches (all are data, fixed during a fit):
+      use_uniform_lambda_prior = 0: uniform-S prior (US)
+                                 1: uniform-lambda prior (UL)
+                                 This choice is independent of include_process.
+      include_process          = 0: omit the Process feedback likelihood
+                                 1: include it
+      use_lambda_F2x_correlation = 0: independent Gaussian assessments of
+                                       lambda and F_2xCO2
+                                    1: correlated bivariate Gaussian;
+                                       requires include_process = 1
+      include_historical       = 0: omit the historical energy-budget likelihood
+                                 1: include it
+      include_trend            = 0: omit the recent-Trend likelihood
+                                 1: include it as an independent line
+      include_lgm              = 0: omit the LGM energy-budget likelihood
+                                 1: include it
+      include_pliocene         = 0: omit the Pliocene energy-budget likelihood
+                                 1: include it
+      use_pattern_effect_copula = 0: skew-normal historical pattern effect,
+                                     correlated Gaussian LGM/Pliocene effects
+                                  1: three-way Gaussian copula preserving those
+                                     three marginal distributions
+
+    When a line is excluded, its budget/observation coupling is removed but
+    its nuisance variables retain normalized, proper distributions. This
+    keeps one fixed parameter interface for every switch combination. After
+    marginalization, those disconnected nuisance variables contribute only a
+    constant and cannot change the posterior of S, lambda, or F_2xCO2.
+
+    CAUTION: the recent Trend interval overlaps the historical record.  Its
+    independence from L_hist is an explicit sensitivity assumption, not a
+    claim that the two lines of evidence are physically independent.
+
+    --- prior choice (sec. 7.2) -----------------------------------------------
+
+    The model samples lambda directly and reports S = -F_2xCO2/lambda as a
+    transformed parameter. The lambda bounds depend on F_2xCO2 so that they
+    preserve the original 0.1 <= S <= 20 K support exactly.
+
+    *Uniform lambda*
+    Direct sampling supplies the uniform-lambda measure without an additional
+    target adjustment.
+    
+    *Uniform S*
+    The change of variables has
+        |dS/dlambda| = F_2xCO2/lambda^2.
+    Therefore the uniform-S option adds
+        target += log(F_2xCO2) - 2*log(-lambda)
+    to the density expressed in the sampled (lambda, F_2xCO2) coordinates.
+
+    --- F_hist / F_2xCO2 correlation -----------------------------------------
+
+    Sherwood sec. 4.1.2 (p. 43) decomposes F_hist into a CO2 component (which
+    is proportional to F_2xCO2) and a non-CO2 component (independent), to
+    preserve the F_hist / F_2xCO2 correlation. Here the non-CO2 term is split
+    further into anthropogenic aerosol (ARI + ACI) and residual other forcing
+    so that aerosol forcing can be diagnosed and varied explicitly.
+*/
+
+functions {
+    // Stratospheric-adjusted CO2 forcing from Meinshausen et al. (2020),
+    // evaluated at preindustrial N2O = 273 ppb. A common SARF-to-ERF factor
+    // cancels when this function is used as a ratio to its own CO2 doubling.
+    real meinshausen_co2_sarf(real co2_ppm) {
+        real a1 = -2.4785e-7;
+        real b1 = 7.5906e-4;
+        real c1 = -2.1492e-3;
+        real d1 = 5.2488;
+        real co2_ref = 277.15;
+        real n2o_pi = 273.0;
+        real co2_alpha_max = co2_ref - b1 / (2 * a1);
+        real alpha_prime;
+
+        if (co2_ppm <= co2_ref)
+            alpha_prime = d1;
+        else if (co2_ppm < co2_alpha_max)
+            alpha_prime = d1 + a1 * square(co2_ppm - co2_ref)
+                             + b1 * (co2_ppm - co2_ref);
+        else
+            alpha_prime = d1 - square(b1) / (4 * a1);
+
+        return (alpha_prime + c1 * sqrt(n2o_pi)) * log(co2_ppm / co2_ref);
+    }
+}
+
+
+data {
+    // Prior choice: 0 = US, 1 = UL, independent of all evidence switches.
+    int<lower=0, upper=1> use_uniform_lambda_prior;
+
+    // Line-of-evidence switches.
+    int<lower=0, upper=1> include_process;
+    int<lower=0, upper=1> include_historical;
+    int<lower=0, upper=1> include_trend;
+    int<lower=0, upper=1> include_lgm;
+    int<lower=0, upper=1> include_pliocene;
+
+    // Optional dependence structures.
+    int<lower=0, upper=1> use_lambda_F2x_correlation;
+    int<lower=0, upper=1> use_pattern_effect_copula;
+
+    // ---- Process likelihood (Sherwood Table 1, aggregate) ----
+    // The sum of 11 individual feedback Gaussians (convolves to N(-1.30, 0.44)).
+    real          mu_lambda;
+    real<lower=0> sig_lambda;
+
+    // ---- Forcing (Sherwood sec. 3.2.1) ----
+    real<lower=0> erf_2x;
+    real<lower=0> sig_F2xCO2;
+
+    // Correlation of the Gaussian Process lambda and F_2xCO2 assessments.
+    // Negative means larger forcing accompanies more-negative lambda.
+    real<lower=-1, upper=1> rho_lambda_F2x;
+
+    // ---- State-dependence (Sherwood Table 7/8) ----
+    real          mu_zeta;
+    real<lower=0> sig_zeta;
+
+    // ---- Historical (Sherwood Table 5, baseline row) ----
+    real          mu_T_hist;
+    real<lower=0> sig_T_hist;
+
+    real          mu_N_hist;
+    real<lower=0> sig_N_hist;
+
+    // Central historical CO2 forcing evaluated at erf_2x. Its uncertainty
+    // from radiative efficiency is inherited from the shared F_2xCO2 draw.
+    real          mu_F_CO2_hist;
+
+    real          mu_F_anthro_aerosol_hist;
+    real<lower=0> sig_F_anthro_aerosol_hist;
+
+    real          mu_F_other_hist;
+    real<lower=0> sig_F_other_hist;
+
+    // Historical pattern-effect prior: skew-normal(location, scale, shape).
+    real          loc_dlambda;
+    real<lower=0> scale_dlambda;
+    real          shape_dlambda;
+
+    // ---- Recent Trend (2006--2024; all trends are per decade) ----
+    real          mu_T_trend;
+    real<lower=0> sig_T_trend;
+
+    real          mu_N_trend;
+    real<lower=0> sig_N_trend;
+
+    // Covariance of the observed temperature and TOA-imbalance trend errors.
+    real          cov_TN_trend;
+
+    real          mu_F_trend;
+    real<lower=0> sig_F_trend;
+
+    real          mu_dlambda_trend;
+    real<lower=0> sig_dlambda_trend;
+
+    // ---- LGM (Sherwood Table 7) ----
+    real          mu_T_LGM;
+    real<lower=0> sig_T_LGM;
+
+    real          mu_F_other_LGM;
+    real<lower=0> sig_F_other_LGM;
+
+    // Signed LGM CO2 forcing multiplier relative to F_2xCO2.
+    real          mu_f_CO2_LGM;
+    real<lower=0> sig_f_CO2_LGM;
+
+    real          mu_N_LGM;
+    real<lower=0> sig_N_LGM;
+
+    real          mu_dlambda_LGM;
+    real<lower=0> sig_dlambda_LGM;
+
+    // real          mu_alpha;
+    // real<lower=0> sig_alpha;
+
+    // ---- Pliocene (Sherwood Table 8) ----
+    real          mu_T_plio;
+    real<lower=0> sig_T_plio;
+
+    real          mu_CO2_plio;
+    real<lower=0> sig_CO2_plio;
+    real<lower=0> CO2_PI;
+
+    real          mu_F_plio_nonGHG;
+    real<lower=0> sig_F_plio_nonGHG;
+
+    real          mu_N_plio;
+    real<lower=0> sig_N_plio;
+
+    real          mu_dlambda_plio;
+    real<lower=0> sig_dlambda_plio;
+
+    // Pattern-effect correlations. The historical correlations are used only
+    // by the copula; rho_dlambda_LGM_plio is used by both pattern-prior modes.
+    real<lower=-1, upper=1> rho_dlambda_hist_LGM;
+    real<lower=-1, upper=1> rho_dlambda_hist_plio;
+    real<lower=-1, upper=1> rho_dlambda_LGM_plio;
+
+    real          mu_fCH4;
+    real<lower=0> sig_fCH4;
+
+    // real          mu_fESS;
+    // real<lower=0> sig_fESS;
+}
+transformed data {
+    matrix[2, 2] cov_lambda_F2x;
+    matrix[2, 2] L_lambda_F2x;
+    matrix[2, 2] cov_TN_trend_matrix;
+    matrix[2, 2] L_TN_trend;
+    matrix[3, 3] R_dlambda_copula;
+    matrix[3, 3] L_dlambda_copula;
+
+    if (use_lambda_F2x_correlation == 1) {
+        if (include_process == 0)
+            reject("lambda/F_2xCO2 correlation requires include_process = 1.");
+        if (abs(rho_lambda_F2x) >= 1)
+            reject("rho_lambda_F2x must be strictly between -1 and 1 when enabled.");
+
+        cov_lambda_F2x[1, 1] = square(sig_F2xCO2);
+        cov_lambda_F2x[2, 2] = square(sig_lambda);
+        cov_lambda_F2x[1, 2] = rho_lambda_F2x * sig_F2xCO2 * sig_lambda;
+        cov_lambda_F2x[2, 1] = cov_lambda_F2x[1, 2];
+        L_lambda_F2x = cholesky_decompose(cov_lambda_F2x);
+    } else {
+        // Assigned but unused when the two assessments are independent.
+        cov_lambda_F2x = diag_matrix(rep_vector(1.0, 2));
+        L_lambda_F2x = diag_matrix(rep_vector(1.0, 2));
+    }
+
+    if (include_trend == 1) {
+        if (abs(cov_TN_trend) >= sig_T_trend * sig_N_trend)
+            reject("Trend T/N covariance matrix must be positive definite: ",
+                   "abs(cov_TN_trend) must be less than ",
+                   "sig_T_trend * sig_N_trend.");
+
+        cov_TN_trend_matrix[1, 1] = square(sig_T_trend);
+        cov_TN_trend_matrix[2, 2] = square(sig_N_trend);
+        cov_TN_trend_matrix[1, 2] = cov_TN_trend;
+        cov_TN_trend_matrix[2, 1] = cov_TN_trend;
+        L_TN_trend = cholesky_decompose(cov_TN_trend_matrix);
+    } else {
+        // Assigned but unused; disabled options should not reject on an
+        // irrelevant covariance input.
+        cov_TN_trend_matrix = diag_matrix(rep_vector(1.0, 2));
+        L_TN_trend = diag_matrix(rep_vector(1.0, 2));
+    }
+
+    R_dlambda_copula = diag_matrix(rep_vector(1.0, 3));
+    R_dlambda_copula[1, 2] = rho_dlambda_hist_LGM;
+    R_dlambda_copula[2, 1] = rho_dlambda_hist_LGM;
+    R_dlambda_copula[1, 3] = rho_dlambda_hist_plio;
+    R_dlambda_copula[3, 1] = rho_dlambda_hist_plio;
+    R_dlambda_copula[2, 3] = rho_dlambda_LGM_plio;
+    R_dlambda_copula[3, 2] = rho_dlambda_LGM_plio;
+
+    if (use_pattern_effect_copula == 1) {
+        if (determinant(R_dlambda_copula) <= 0)
+            reject("Historical/LGM/Pliocene pattern-effect correlation matrix ",
+                   "must be positive definite.");
+        L_dlambda_copula = cholesky_decompose(R_dlambda_copula);
+    } else {
+        if (abs(rho_dlambda_LGM_plio) >= 1)
+            reject("LGM/Pliocene pattern-effect correlation must be strictly ",
+                   "between -1 and 1 in baseline mode.");
+        // Assigned but unused in the baseline pattern-prior mode.
+        L_dlambda_copula = diag_matrix(rep_vector(1.0, 3));
+    }
+}
+parameters {
+    // The sampling space: the independent parameters that are Monte Carlo sampled
+    real<lower=0> F_2xCO2;
+    // These F-dependent bounds preserve 0.1 <= S <= 20 under
+    // S = -F_2xCO2/l. They also enforce the physical l < 0 domain.
+    real<lower=-F_2xCO2 / 0.1, upper=-F_2xCO2 / 20> l;
+    real zeta;
+
+    // historical nuisance parameters
+    real F_anthro_aerosol_hist;
+    real F_other_hist;
+    real T_hist;
+    real dlambda;
+
+    // LGM nuisance
+    real T_LGM;
+    real F_other_LGM;
+    real f_CO2_LGM;
+    real dlambda_LGM;
+    // real alpha;
+
+    // Pliocene nuisance
+    real T_plio;
+    real <lower=0> CO2_plio;
+    real F_plio_nonGHG;
+    real dlambda_plio;
+    real fCH4;
+    // real fESS;
+
+    // recent-Trend nuisance parameters
+    real F_trend;
+    real T_trend;
+    real dlambda_trend;
+}
+transformed parameters{
+
+    // These are dependent parameters that are a function of the independent parameters
+    real S;        // equilibrium climate sensitivity
+    real F_CO2_hist;
+    real F_hist;
+    real N_hist;
+    real N_trend;
+    real F_CO2_LGM;
+    real N_LGM;
+    real f_CO2_plio;
+    real F_plio_CO2;
+    real N_plio;
+
+    // parameter formulas
+    
+    // ECS derived from the directly sampled feedback parameter.
+    S = -F_2xCO2 / l;
+
+    // Historical CO2 forcing shares the same radiative-efficiency uncertainty
+    // as F_2xCO2. At F_2xCO2 = erf_2x its central value is mu_F_CO2_hist.
+    F_CO2_hist = mu_F_CO2_hist * F_2xCO2 / erf_2x;
+    F_hist = F_CO2_hist + F_anthro_aerosol_hist + F_other_hist;
+
+    // coupling equations
+    N_hist  = F_hist + T_hist * (l-dlambda);
+
+    // 2006--2024 trend energy budget.  The shared l carries the same
+    // F_2xCO2 uncertainty as every other line of evidence.
+    N_trend = F_trend + T_trend * (l - dlambda_trend);
+
+    F_CO2_LGM = f_CO2_LGM * F_2xCO2;
+    N_LGM = F_other_LGM + F_CO2_LGM
+            - T_LGM * (dlambda_LGM - l / (1 + zeta));
+
+    f_CO2_plio = (meinshausen_co2_sarf(CO2_plio)
+                  - meinshausen_co2_sarf(CO2_PI))
+                 / (meinshausen_co2_sarf(2 * CO2_PI)
+                    - meinshausen_co2_sarf(CO2_PI));
+    F_plio_CO2 = f_CO2_plio * F_2xCO2;
+    // T_plio = (-F_plio_CO2*(1+fCH4) - F_plio_nonGHG) / (l/(1+zeta) - dlambda_plio); OLD VERSION
+    N_plio = F_plio_CO2*(1+fCH4) + F_plio_nonGHG + T_plio*(l/(1+zeta) - dlambda_plio);
+}
+model {
+    // Shared forcing and optional Process likelihood. The correlated branch
+    // preserves both Gaussian marginals and changes only their dependence.
+    if (include_process == 1) {
+        if (use_lambda_F2x_correlation == 1) {
+            vector[2] lambda_F2x_pair;
+            vector[2] mu_lambda_F2x_pair;
+
+            lambda_F2x_pair[1] = F_2xCO2;
+            lambda_F2x_pair[2] = l;
+            mu_lambda_F2x_pair[1] = erf_2x;
+            mu_lambda_F2x_pair[2] = mu_lambda;
+            lambda_F2x_pair ~ multi_normal_cholesky(
+                mu_lambda_F2x_pair, L_lambda_F2x
+            );
+        } else {
+            F_2xCO2 ~ normal(erf_2x, sig_F2xCO2);
+            l ~ normal(mu_lambda, sig_lambda);
+        }
+    } else {
+        // F_2xCO2 retains its assessment when Process evidence is omitted.
+        F_2xCO2 ~ normal(erf_2x, sig_F2xCO2);
+    }
+    zeta ~ normal(mu_zeta, sig_zeta);
+
+    // Historical
+    F_anthro_aerosol_hist ~ normal(mu_F_anthro_aerosol_hist,
+                                   sig_F_anthro_aerosol_hist);
+    F_other_hist          ~ normal(mu_F_other_hist, sig_F_other_hist);
+    T_hist  ~ normal(mu_T_hist , sig_T_hist);
+    if (include_historical == 1)
+        N_hist ~ normal(mu_N_hist, sig_N_hist);
+
+    // Recent-Trend nuisance priors are always proper. When Trend is disabled,
+    // they remain independent of all shared ECS parameters and therefore do
+    // not alter their posterior; the corresponding output columns are inert.
+    F_trend       ~ normal(mu_F_trend, sig_F_trend);
+    dlambda_trend ~ normal(mu_dlambda_trend, sig_dlambda_trend);
+    if (include_trend == 1) {
+        // Score T and budget-implied N jointly to retain their assessed
+        // within-Trend observational covariance.
+        vector[2] trend_pair;
+        vector[2] mu_trend_pair;
+
+        trend_pair[1] = T_trend;
+        trend_pair[2] = N_trend;
+        mu_trend_pair[1] = mu_T_trend;
+        mu_trend_pair[2] = mu_N_trend;
+
+        trend_pair ~ multi_normal_cholesky(mu_trend_pair, L_TN_trend);
+    } else {
+        T_trend ~ normal(mu_T_trend, sig_T_trend);
+    }
+
+    // LGM
+    T_LGM       ~ normal(mu_T_LGM, sig_T_LGM);
+    F_other_LGM ~ normal(mu_F_other_LGM, sig_F_other_LGM);
+    f_CO2_LGM   ~ normal(mu_f_CO2_LGM, sig_f_CO2_LGM);
+    if (include_lgm == 1)
+        N_LGM ~ normal(mu_N_LGM, sig_N_LGM);
+
+    // Pliocene
+    T_plio        ~ normal(mu_T_plio, sig_T_plio);
+    CO2_plio      ~ normal(mu_CO2_plio, sig_CO2_plio);
+    fCH4          ~ normal(mu_fCH4, sig_fCH4);
+    F_plio_nonGHG ~ normal(mu_F_plio_nonGHG, sig_F_plio_nonGHG);
+    if (include_pliocene == 1)
+        N_plio ~ normal(mu_N_plio, sig_N_plio);
+    // fESS       ~ normal(mu_fESS, sig_fESS);
+
+    // Select exactly one joint prior for the three pattern effects.
+    if (use_pattern_effect_copula == 1) {
+        // The marginal-density terms preserve the requested skew-normal and
+        // Gaussian priors; the density ratio adds the Gaussian copula.
+        vector[3] z_dlambda;
+        real p_hist;
+
+        p_hist = fmin(
+            1 - 1e-12,
+            fmax(
+                1e-12,
+                skew_normal_cdf(
+                    dlambda | loc_dlambda, scale_dlambda, shape_dlambda
+                )
+            )
+        );
+
+        z_dlambda[1] = inv_Phi(p_hist);
+        z_dlambda[2] = (dlambda_LGM - mu_dlambda_LGM) / sig_dlambda_LGM;
+        z_dlambda[3] = (dlambda_plio - mu_dlambda_plio) / sig_dlambda_plio;
+
+        target += skew_normal_lpdf(
+            dlambda | loc_dlambda, scale_dlambda, shape_dlambda
+        );
+        target += normal_lpdf(
+            dlambda_LGM | mu_dlambda_LGM, sig_dlambda_LGM
+        );
+        target += normal_lpdf(
+            dlambda_plio | mu_dlambda_plio, sig_dlambda_plio
+        );
+        target += multi_normal_cholesky_lpdf(
+            z_dlambda | rep_vector(0.0, 3), L_dlambda_copula
+        );
+        target += -std_normal_lpdf(z_dlambda);
+    } else {
+        vector[2] dlambda_pair;
+        vector[2] mu_dlambda_pair;
+        matrix[2, 2] cov_dlambda_pair;
+
+        dlambda ~ skew_normal(loc_dlambda, scale_dlambda, shape_dlambda);
+
+        dlambda_pair[1] = dlambda_LGM;
+        dlambda_pair[2] = dlambda_plio;
+        mu_dlambda_pair[1] = mu_dlambda_LGM;
+        mu_dlambda_pair[2] = mu_dlambda_plio;
+        cov_dlambda_pair[1, 1] = square(sig_dlambda_LGM);
+        cov_dlambda_pair[2, 2] = square(sig_dlambda_plio);
+        cov_dlambda_pair[1, 2] = rho_dlambda_LGM_plio
+                                 * sig_dlambda_LGM * sig_dlambda_plio;
+        cov_dlambda_pair[2, 1] = cov_dlambda_pair[1, 2];
+
+        dlambda_pair ~ multi_normal(mu_dlambda_pair, cov_dlambda_pair);
+    }
+
+    // Direct sampling gives the uniform-lambda measure by default. Convert it
+    // to uniform S only when US is requested. This remains selectable whether
+    // or not the Process likelihood is included.
+    if (use_uniform_lambda_prior == 0)
+        target += log(F_2xCO2) - 2 * log(-l);
+}
