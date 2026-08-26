@@ -1,22 +1,25 @@
 /*  Community ECS assessment model with data-selectable sensitivity options.
 
-    Core lines of evidence (based on sec. 7 of Sherwood et al. 2020):
+    Core lines of evidence:
 
-      L_proc    process understanding (sec. 3): aggregate Gaussian on the
-                total feedback parameter lambda = -F_2xCO2/S, derived as the
-                sum of 11 component-feedback Gaussians (Table 1).
-      L_hist    historical warming and TOA imbalance with pattern effect
-                (sec. 4, eq. 6):
-                N = F + T*(lambda - dlambda).
+      L_proc    process understanding: aggregate Gaussian on the
+                total 2xCO2 feedback, lambda = -F_2xCO2/S, formed as the
+                sum of component feedbacks.
+      L_hist    historical warming and TOA imbalance with pattern effect:
+                N = F + (lambda - dlambda)*T.
                 Historical forcing is decomposed as
                 F = F_CO2 + F_anthro_aerosol + F_other, with
                 F_CO2 proportional to the shared F_2xCO2 parameter.
       L_trend   2006--2024 trends in temperature, effective radiative forcing,
                 and TOA imbalance:
-                N_trend = F_trend
-                          + T_trend*(lambda - dlambda_trend).
-                This sensitivity treats Trend as independent of L_hist and
-                the other lines of evidence, while retaining the assessed
+                N_trend = F_trend + (lambda - dlambda_trend)*T_trend.
+                Trend forcing is decomposed as
+                F_trend = F_CO2_trend + F_anthro_aerosol_trend
+                          + F_other_trend, with F_CO2_trend proportional to
+                          the shared F_2xCO2 parameter.
+                Apart from the shared F_2xCO2 forcing uncertainty, this
+                sensitivity treats Trend as independent of L_hist and the
+                other lines of evidence, while retaining the assessed
                 covariance between the Trend T and N observations.
                 Included only when include_trend = 1.
       L_LGM     Last Glacial Maximum budget residual:
@@ -52,6 +55,9 @@
                                  1: include it
       include_pliocene         = 0: omit the Pliocene energy-budget likelihood
                                  1: include it
+      use_score_T              = 0: score TOA imbalance N (default)
+                                 1: rearrange every enabled energy budget and
+                                    score temperature T
       use_pattern_effect_copula = 0: skew-normal historical pattern effect,
                                      correlated Gaussian LGM/Pliocene effects
                                   1: three-way Gaussian copula preserving those
@@ -63,9 +69,21 @@
     marginalization, those disconnected nuisance variables contribute only a
     constant and cannot change the posterior of S, lambda, or F_2xCO2.
 
-    CAUTION: the recent Trend interval overlaps the historical record.  Its
-    independence from L_hist is an explicit sensitivity assumption, not a
-    claim that the two lines of evidence are physically independent.
+    CAUTION: the recent Trend interval overlaps the historical record. Apart
+    from their shared F_2xCO2 uncertainty, the model has no cross-line error
+    covariance between Trend and L_hist. That is an explicit sensitivity
+    assumption, not a claim that the observations are physically independent.
+
+    --- score-N / score-T choice ---------------------------------------------
+
+    For a generic budget N = F + beta*T, score N samples T and evaluates the
+    budget-implied N against its assessment. Score T samples N, rearranges the
+    same equation to T = (N-F)/beta, and evaluates that temperature against
+    its assessment. No Jacobian is added: these are deliberately different
+    response-variable likelihood conventions, not a reparameterization of one
+    common probability model. Trend retains its assessed T/N error covariance
+    in both conventions. Score T is singular at beta = 0, so a numerically
+    negligible interval around zero is assigned zero probability.
 
     --- prior choice (sec. 7.2) -----------------------------------------------
 
@@ -84,16 +102,26 @@
         target += log(F_2xCO2) - 2*log(-lambda)
     to the density expressed in the sampled (lambda, F_2xCO2) coordinates.
 
-    --- F_hist / F_2xCO2 correlation -----------------------------------------
+    --- historical/Trend forcing correlation with F_2xCO2 --------------------
 
     Sherwood sec. 4.1.2 (p. 43) decomposes F_hist into a CO2 component (which
     is proportional to F_2xCO2) and a non-CO2 component (independent), to
     preserve the F_hist / F_2xCO2 correlation. Here the non-CO2 term is split
     further into anthropogenic aerosol (ARI + ACI) and residual other forcing
     so that aerosol forcing can be diagnosed and varied explicitly.
+
+    The recent-Trend forcing uses the same construction: its CO2 component is
+    proportional to F_2xCO2, while its anthropogenic aerosol (ARI + ACI) and
+    residual other components have independent nuisance priors. The native CO2
+    ensemble spread is not added separately, which would double count the
+    shared radiative-efficiency uncertainty.
 */
 
 functions {
+    int value_is_finite(real x) {
+        return !(is_nan(x) || is_inf(x));
+    }
+
     // Stratospheric-adjusted CO2 forcing from Meinshausen et al. (2020),
     // evaluated at preindustrial N2O = 273 ppb. A common SARF-to-ERF factor
     // cancels when this function is used as a ratio to its own CO2 doubling.
@@ -130,6 +158,9 @@ data {
     int<lower=0, upper=1> include_trend;
     int<lower=0, upper=1> include_lgm;
     int<lower=0, upper=1> include_pliocene;
+
+    // Global energy-budget response convention: 0 = score N, 1 = score T.
+    int<lower=0, upper=1> use_score_T;
 
     // Optional dependence structures.
     int<lower=0, upper=1> use_lambda_F2x_correlation;
@@ -184,8 +215,15 @@ data {
     // Covariance of the observed temperature and TOA-imbalance trend errors.
     real          cov_TN_trend;
 
-    real          mu_F_trend;
-    real<lower=0> sig_F_trend;
+    // Central CO2 forcing trend evaluated at erf_2x. Its uncertainty from
+    // radiative efficiency is inherited from the shared F_2xCO2 draw.
+    real          mu_F_CO2_trend;
+
+    real          mu_F_anthro_aerosol_trend;
+    real<lower=0> sig_F_anthro_aerosol_trend;
+
+    real          mu_F_other_trend;
+    real<lower=0> sig_F_other_trend;
 
     real          mu_dlambda_trend;
     real<lower=0> sig_dlambda_trend;
@@ -240,12 +278,17 @@ data {
     // real<lower=0> sig_fESS;
 }
 transformed data {
+    real score_T_min_abs_feedback;
     matrix[2, 2] cov_lambda_F2x;
     matrix[2, 2] L_lambda_F2x;
     matrix[2, 2] cov_TN_trend_matrix;
     matrix[2, 2] L_TN_trend;
     matrix[3, 3] R_dlambda_copula;
     matrix[3, 3] L_dlambda_copula;
+
+    // The score-T equations are undefined at zero effective feedback. This
+    // guard is many orders of magnitude below scientifically relevant values.
+    score_T_min_abs_feedback = 1e-10;
 
     if (use_lambda_F2x_correlation == 1) {
         if (include_process == 0)
@@ -305,7 +348,9 @@ transformed data {
 }
 parameters {
     // The sampling space: the independent parameters that are Monte Carlo sampled
-    real<lower=0> F_2xCO2;
+    // A tiny positive numerical floor prevents an underflowed warmup proposal
+    // from collapsing the two F-dependent bounds on l to the same value.
+    real<lower=1e-6> F_2xCO2;
     // These F-dependent bounds preserve 0.1 <= S <= 20 under
     // S = -F_2xCO2/l. They also enforce the physical l < 0 domain.
     real<lower=-F_2xCO2 / 0.1, upper=-F_2xCO2 / 20> l;
@@ -315,10 +360,12 @@ parameters {
     real F_anthro_aerosol_hist;
     real F_other_hist;
     real T_hist;
+    real N_hist_scoreT;
     real dlambda;
 
     // LGM nuisance
     real T_LGM;
+    real N_LGM_scoreT;
     real F_other_LGM;
     real f_CO2_LGM;
     real dlambda_LGM;
@@ -326,6 +373,7 @@ parameters {
 
     // Pliocene nuisance
     real T_plio;
+    real N_plio_scoreT;
     real <lower=0> CO2_plio;
     real F_plio_nonGHG;
     real dlambda_plio;
@@ -333,8 +381,10 @@ parameters {
     // real fESS;
 
     // recent-Trend nuisance parameters
-    real F_trend;
+    real F_anthro_aerosol_trend;
+    real F_other_trend;
     real T_trend;
+    real N_trend_scoreT;
     real dlambda_trend;
 }
 transformed parameters{
@@ -344,12 +394,18 @@ transformed parameters{
     real F_CO2_hist;
     real F_hist;
     real N_hist;
+    real T_hist_scoreT;
+    real F_CO2_trend;
+    real F_trend;
     real N_trend;
+    real T_trend_scoreT;
     real F_CO2_LGM;
     real N_LGM;
+    real T_LGM_scoreT;
     real f_CO2_plio;
     real F_plio_CO2;
     real N_plio;
+    real T_plio_scoreT;
 
     // parameter formulas
     
@@ -363,22 +419,47 @@ transformed parameters{
 
     // coupling equations
     N_hist  = F_hist + T_hist * (l-dlambda);
+    if (abs(l - dlambda) > score_T_min_abs_feedback)
+        T_hist_scoreT = (N_hist_scoreT - F_hist) / (l - dlambda);
+    else
+        T_hist_scoreT = 0;
 
-    // 2006--2024 trend energy budget.  The shared l carries the same
-    // F_2xCO2 uncertainty as every other line of evidence.
+    // The Trend CO2 forcing shares the same radiative-efficiency uncertainty
+    // as F_2xCO2. Aerosol and residual-other forcing are separate nuisances.
+    F_CO2_trend = mu_F_CO2_trend * F_2xCO2 / erf_2x;
+    F_trend = F_CO2_trend + F_anthro_aerosol_trend + F_other_trend;
+
+    // 2006--2024 trend energy budget.
     N_trend = F_trend + T_trend * (l - dlambda_trend);
+    if (abs(l - dlambda_trend) > score_T_min_abs_feedback)
+        T_trend_scoreT = (N_trend_scoreT - F_trend)
+                         / (l - dlambda_trend);
+    else
+        T_trend_scoreT = 0;
 
     F_CO2_LGM = f_CO2_LGM * F_2xCO2;
     N_LGM = F_other_LGM + F_CO2_LGM
             - T_LGM * (dlambda_LGM - l / (1 + zeta));
+    if (abs(l / (1 + zeta) - dlambda_LGM)
+        > score_T_min_abs_feedback)
+        T_LGM_scoreT = (N_LGM_scoreT - F_other_LGM - F_CO2_LGM)
+                       / (l / (1 + zeta) - dlambda_LGM);
+    else
+        T_LGM_scoreT = 0;
 
     f_CO2_plio = (meinshausen_co2_sarf(CO2_plio)
                   - meinshausen_co2_sarf(CO2_PI))
                  / (meinshausen_co2_sarf(2 * CO2_PI)
                     - meinshausen_co2_sarf(CO2_PI));
     F_plio_CO2 = f_CO2_plio * F_2xCO2;
-    // T_plio = (-F_plio_CO2*(1+fCH4) - F_plio_nonGHG) / (l/(1+zeta) - dlambda_plio); OLD VERSION
     N_plio = F_plio_CO2*(1+fCH4) + F_plio_nonGHG + T_plio*(l/(1+zeta) - dlambda_plio);
+    if (abs(l / (1 + zeta) - dlambda_plio)
+        > score_T_min_abs_feedback)
+        T_plio_scoreT = (N_plio_scoreT - F_plio_CO2 * (1 + fCH4)
+                         - F_plio_nonGHG)
+                        / (l / (1 + zeta) - dlambda_plio);
+    else
+        T_plio_scoreT = 0;
 }
 model {
     // Shared forcing and optional Process likelihood. The correlated branch
@@ -410,44 +491,111 @@ model {
                                    sig_F_anthro_aerosol_hist);
     F_other_hist          ~ normal(mu_F_other_hist, sig_F_other_hist);
     T_hist  ~ normal(mu_T_hist , sig_T_hist);
-    if (include_historical == 1)
-        N_hist ~ normal(mu_N_hist, sig_N_hist);
+    N_hist_scoreT ~ normal(mu_N_hist, sig_N_hist);
+    if (include_historical == 1) {
+        if (use_score_T == 1) {
+            if (abs(l - dlambda) > score_T_min_abs_feedback
+                && value_is_finite(T_hist_scoreT))
+                T_hist_scoreT ~ normal(mu_T_hist, sig_T_hist);
+            else
+                target += negative_infinity();
+        } else {
+            if (value_is_finite(N_hist))
+                N_hist ~ normal(mu_N_hist, sig_N_hist);
+            else
+                target += negative_infinity();
+        }
+    }
 
     // Recent-Trend nuisance priors are always proper. When Trend is disabled,
     // they remain independent of all shared ECS parameters and therefore do
     // not alter their posterior; the corresponding output columns are inert.
-    F_trend       ~ normal(mu_F_trend, sig_F_trend);
+    F_anthro_aerosol_trend ~ normal(
+        mu_F_anthro_aerosol_trend, sig_F_anthro_aerosol_trend
+    );
+    F_other_trend ~ normal(mu_F_other_trend, sig_F_other_trend);
     dlambda_trend ~ normal(mu_dlambda_trend, sig_dlambda_trend);
     if (include_trend == 1) {
-        // Score T and budget-implied N jointly to retain their assessed
-        // within-Trend observational covariance.
+        // Score the observed T/N pair in the selected orientation. The same
+        // covariance matrix is used for both response-variable conventions.
         vector[2] trend_pair;
         vector[2] mu_trend_pair;
 
-        trend_pair[1] = T_trend;
-        trend_pair[2] = N_trend;
         mu_trend_pair[1] = mu_T_trend;
         mu_trend_pair[2] = mu_N_trend;
 
-        trend_pair ~ multi_normal_cholesky(mu_trend_pair, L_TN_trend);
+        if (use_score_T == 1) {
+            // T_trend is inactive in this branch but retains a proper prior.
+            T_trend ~ normal(mu_T_trend, sig_T_trend);
+            trend_pair[1] = T_trend_scoreT;
+            trend_pair[2] = N_trend_scoreT;
+            if (abs(l - dlambda_trend) > score_T_min_abs_feedback
+                && value_is_finite(T_trend_scoreT)
+                && value_is_finite(N_trend_scoreT))
+                trend_pair ~ multi_normal_cholesky(
+                    mu_trend_pair, L_TN_trend
+                );
+            else
+                target += negative_infinity();
+        } else {
+            // N_trend_scoreT is inactive in this branch but remains proper.
+            N_trend_scoreT ~ normal(mu_N_trend, sig_N_trend);
+            trend_pair[1] = T_trend;
+            trend_pair[2] = N_trend;
+            if (value_is_finite(T_trend) && value_is_finite(N_trend))
+                trend_pair ~ multi_normal_cholesky(
+                    mu_trend_pair, L_TN_trend
+                );
+            else
+                target += negative_infinity();
+        }
     } else {
         T_trend ~ normal(mu_T_trend, sig_T_trend);
+        N_trend_scoreT ~ normal(mu_N_trend, sig_N_trend);
     }
 
     // LGM
     T_LGM       ~ normal(mu_T_LGM, sig_T_LGM);
+    N_LGM_scoreT ~ normal(mu_N_LGM, sig_N_LGM);
     F_other_LGM ~ normal(mu_F_other_LGM, sig_F_other_LGM);
     f_CO2_LGM   ~ normal(mu_f_CO2_LGM, sig_f_CO2_LGM);
-    if (include_lgm == 1)
-        N_LGM ~ normal(mu_N_LGM, sig_N_LGM);
+    if (include_lgm == 1) {
+        if (use_score_T == 1) {
+            if (abs(l / (1 + zeta) - dlambda_LGM)
+                > score_T_min_abs_feedback
+                && value_is_finite(T_LGM_scoreT))
+                T_LGM_scoreT ~ normal(mu_T_LGM, sig_T_LGM);
+            else
+                target += negative_infinity();
+        } else {
+            if (value_is_finite(N_LGM))
+                N_LGM ~ normal(mu_N_LGM, sig_N_LGM);
+            else
+                target += negative_infinity();
+        }
+    }
 
     // Pliocene
     T_plio        ~ normal(mu_T_plio, sig_T_plio);
+    N_plio_scoreT ~ normal(mu_N_plio, sig_N_plio);
     CO2_plio      ~ normal(mu_CO2_plio, sig_CO2_plio);
     fCH4          ~ normal(mu_fCH4, sig_fCH4);
     F_plio_nonGHG ~ normal(mu_F_plio_nonGHG, sig_F_plio_nonGHG);
-    if (include_pliocene == 1)
-        N_plio ~ normal(mu_N_plio, sig_N_plio);
+    if (include_pliocene == 1) {
+        if (use_score_T == 1) {
+            if (abs(l / (1 + zeta) - dlambda_plio)
+                > score_T_min_abs_feedback
+                && value_is_finite(T_plio_scoreT))
+                T_plio_scoreT ~ normal(mu_T_plio, sig_T_plio);
+            else
+                target += negative_infinity();
+        } else {
+            if (value_is_finite(N_plio))
+                N_plio ~ normal(mu_N_plio, sig_N_plio);
+            else
+                target += negative_infinity();
+        }
+    }
     // fESS       ~ normal(mu_fESS, sig_fESS);
 
     // Select exactly one joint prior for the three pattern effects.
