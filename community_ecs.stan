@@ -19,13 +19,14 @@
                 F_trend = F_CO2_trend + F_anthro_aerosol_trend
                           + F_other_trend, with F_CO2_trend proportional to
                           the shared F_2xCO2 parameter.
-                Apart from the shared F_2xCO2 forcing uncertainty, this
-                sensitivity treats Trend as independent of L_hist and the
-                other lines of evidence, while retaining the assessed
-                covariance between the Trend T and N observations.
-                This evidence is a sensitivity test (not part of main result)
-                because it is not fully independent of L_hist.
-                Included only when include_trend = 1.
+                Matching historical and Trend aerosol components have an
+                assessed cross-period covariance, as do the matching
+                residual-other forcing components. The Trend T and N
+                observations retain their assessed within-period covariance.
+                This evidence is included in the current community baseline.
+                It is not fully independent of L_hist: shared forcing errors
+                are modeled below, while the remaining cross-period error
+                covariances are currently treated as negligible.
 
       L_LGM     Last Glacial Maximum budget residual:
                 N_LGM = F_other_LGM + f_CO2_LGM*F_2xCO2
@@ -58,7 +59,7 @@
       include_historical       = 0: omit the historical energy-budget likelihood
                                  1: include it
       include_trend            = 0: omit the recent-trend likelihood
-                                 1: include it
+                                 1: include it (community baseline)
       include_lgm              = 0: omit the LGM energy-budget likelihood
                                  1: include it
       include_pliocene         = 0: omit the Pliocene energy-budget likelihood
@@ -77,10 +78,11 @@
     marginalization, those disconnected nuisance variables contribute only a
     constant and cannot change the posterior of S, lambda, or F_2xCO2.
 
-    CAUTION: the recent Trend interval overlaps the historical record. Apart
-    from their shared F_2xCO2 uncertainty, the model has no cross-line error
-    covariance between Trend and L_hist. That is an explicit sensitivity
-    assumption, not a claim that the observations are physically independent.
+    CAUTION: the recent Trend interval overlaps the historical record. The
+    model includes the assessed cross-period forcing covariance, but no
+    historical-Trend covariance for temperature, TOA imbalance, pattern
+    effects, or other errors. That is an explicit sensitivity assumption, not
+    a claim that the two lines of evidence are otherwise independent.
 
 
     --- score-N / score-T choice ---------------------------------------------
@@ -126,14 +128,15 @@
     --- historical/Trend forcing correlation with F_2xCO2 --------------------
 
     We decompose F_hist into a CO2 component (which is proportional to
-    F_2xCO2) and a non-CO2 component (independent), to
+    F_2xCO2) and non-CO2 components independent of F_2xCO2, to
     preserve the F_hist / F_2xCO2 correlation. Here the non-CO2 term is split
     further into anthropogenic aerosol (ERFari + ERFaci) and residual other forcing
     so that aerosol forcing can be diagnosed and varied explicitly.
 
     The recent-Trend forcing uses the same construction: its CO2 component is
     proportional to F_2xCO2, while its anthropogenic aerosol (ARI + ACI) and
-    residual other components have independent nuisance priors. The native CO2
+    residual-other components are jointly distributed with the matching
+    historical components using their assessed covariances. The native CO2
     ensemble spread is not added separately, which would double count the
     shared radiative-efficiency uncertainty.
 */
@@ -249,6 +252,14 @@ data {
     real          mu_F_other_trend;
     real<lower=0> sig_F_other_trend;
 
+    // Final assessed covariance between the historical change and recent
+    // trend for each non-CO2 forcing component. Its construction, including
+    // structural-error sensitivity choices, is handled before data are passed
+    // to Stan. Units are
+    // (W m^-2)(W m^-2 decade^-1).
+    real cov_F_anthro_aerosol_hist_trend;
+    real cov_F_other_hist_trend;
+
     real          mu_dlambda_trend;
     real<lower=0> sig_dlambda_trend;
 
@@ -304,6 +315,10 @@ transformed data {
     matrix[2, 2] L_lambda_F2x;
     matrix[2, 2] cov_TN_trend_matrix;
     matrix[2, 2] L_TN_trend;
+    matrix[2, 2] cov_F_anthro_aerosol_hist_trend_matrix;
+    matrix[2, 2] L_F_anthro_aerosol_hist_trend;
+    matrix[2, 2] cov_F_other_hist_trend_matrix;
+    matrix[2, 2] L_F_other_hist_trend;
     matrix[3, 3] R_dlambda_copula;
     matrix[3, 3] L_dlambda_copula;
 
@@ -351,6 +366,45 @@ transformed data {
         // irrelevant covariance input.
         cov_TN_trend_matrix = diag_matrix(rep_vector(1.0, 2));
         L_TN_trend = diag_matrix(rep_vector(1.0, 2));
+    }
+
+    if (include_historical == 1 && include_trend == 1) {
+        if (abs(cov_F_anthro_aerosol_hist_trend)
+            >= sig_F_anthro_aerosol_hist * sig_F_anthro_aerosol_trend)
+            reject("Historical/Trend aerosol forcing covariance matrix must be ",
+                   "positive definite.");
+        if (abs(cov_F_other_hist_trend)
+            >= sig_F_other_hist * sig_F_other_trend)
+            reject("Historical/Trend residual-other forcing covariance matrix ",
+                   "must be positive definite.");
+
+        cov_F_anthro_aerosol_hist_trend_matrix[1, 1]
+            = square(sig_F_anthro_aerosol_hist);
+        cov_F_anthro_aerosol_hist_trend_matrix[2, 2]
+            = square(sig_F_anthro_aerosol_trend);
+        cov_F_anthro_aerosol_hist_trend_matrix[1, 2]
+            = cov_F_anthro_aerosol_hist_trend;
+        cov_F_anthro_aerosol_hist_trend_matrix[2, 1]
+            = cov_F_anthro_aerosol_hist_trend;
+        L_F_anthro_aerosol_hist_trend = cholesky_decompose(
+            cov_F_anthro_aerosol_hist_trend_matrix
+        );
+
+        cov_F_other_hist_trend_matrix[1, 1] = square(sig_F_other_hist);
+        cov_F_other_hist_trend_matrix[2, 2] = square(sig_F_other_trend);
+        cov_F_other_hist_trend_matrix[1, 2] = cov_F_other_hist_trend;
+        cov_F_other_hist_trend_matrix[2, 1] = cov_F_other_hist_trend;
+        L_F_other_hist_trend = cholesky_decompose(
+            cov_F_other_hist_trend_matrix
+        );
+    } else {
+        // The covariance does not affect either marginal when only one line is
+        // enabled, so use independent normalized priors for better sampling.
+        cov_F_anthro_aerosol_hist_trend_matrix
+            = diag_matrix(rep_vector(1.0, 2));
+        L_F_anthro_aerosol_hist_trend = diag_matrix(rep_vector(1.0, 2));
+        cov_F_other_hist_trend_matrix = diag_matrix(rep_vector(1.0, 2));
+        L_F_other_hist_trend = diag_matrix(rep_vector(1.0, 2));
     }
 
     R_dlambda_copula = diag_matrix(rep_vector(1.0, 3));
@@ -449,8 +503,9 @@ transformed parameters{
     else
         T_hist_scoreT = 0;
 
-    // The Trend CO2 forcing shares the same uncertainty as F_2xCO2.
-    // Aerosol and residual-other forcing are separate nuisances.
+    // The Trend CO2 forcing shares the same uncertainty as F_2xCO2, which
+    // automatically supplies its covariance with historical CO2 forcing.
+    // Aerosol and residual-other forcing are separate nuisance pairs.
     F_CO2_trend = mu_F_CO2_trend * F_2xCO2 / erf_2x;
     F_trend = F_CO2_trend + F_anthro_aerosol_trend + F_other_trend;
 
@@ -508,10 +563,44 @@ model {
         // F_2xCO2 retains its assessment when Process evidence is omitted.
         F_2xCO2 ~ normal(erf_2x, sig_F2xCO2);
     }
+
+    // Historical/Trend component-forcing priors. When both lines are enabled,
+    // preserve the supplied covariance for each matching component.
+    // Cross-component covariance remains negligible and is not included.
+    if (include_historical == 1 && include_trend == 1) {
+        vector[2] F_anthro_aerosol_hist_trend;
+        vector[2] mu_F_anthro_aerosol_hist_trend;
+        vector[2] F_other_hist_trend;
+        vector[2] mu_F_other_hist_trend;
+
+        F_anthro_aerosol_hist_trend[1] = F_anthro_aerosol_hist;
+        F_anthro_aerosol_hist_trend[2] = F_anthro_aerosol_trend;
+        mu_F_anthro_aerosol_hist_trend[1] = mu_F_anthro_aerosol_hist;
+        mu_F_anthro_aerosol_hist_trend[2] = mu_F_anthro_aerosol_trend;
+        F_anthro_aerosol_hist_trend ~ multi_normal_cholesky(
+            mu_F_anthro_aerosol_hist_trend,
+            L_F_anthro_aerosol_hist_trend
+        );
+
+        F_other_hist_trend[1] = F_other_hist;
+        F_other_hist_trend[2] = F_other_trend;
+        mu_F_other_hist_trend[1] = mu_F_other_hist;
+        mu_F_other_hist_trend[2] = mu_F_other_trend;
+        F_other_hist_trend ~ multi_normal_cholesky(
+            mu_F_other_hist_trend, L_F_other_hist_trend
+        );
+    } else {
+        F_anthro_aerosol_hist ~ normal(
+            mu_F_anthro_aerosol_hist, sig_F_anthro_aerosol_hist
+        );
+        F_anthro_aerosol_trend ~ normal(
+            mu_F_anthro_aerosol_trend, sig_F_anthro_aerosol_trend
+        );
+        F_other_hist ~ normal(mu_F_other_hist, sig_F_other_hist);
+        F_other_trend ~ normal(mu_F_other_trend, sig_F_other_trend);
+    }
+
     // Historical
-    F_anthro_aerosol_hist ~ normal(mu_F_anthro_aerosol_hist,
-                                   sig_F_anthro_aerosol_hist);
-    F_other_hist          ~ normal(mu_F_other_hist, sig_F_other_hist);
     T_hist  ~ normal(mu_T_hist , sig_T_hist);
     N_hist_scoreT ~ normal(mu_N_hist, sig_N_hist);
     if (include_historical == 1) {
@@ -532,10 +621,6 @@ model {
     // Recent-Trend nuisance priors are always proper. When Trend is disabled,
     // they remain independent of all shared ECS parameters and therefore do
     // not alter their posterior; the corresponding output columns are inert.
-    F_anthro_aerosol_trend ~ normal(
-        mu_F_anthro_aerosol_trend, sig_F_anthro_aerosol_trend
-    );
-    F_other_trend ~ normal(mu_F_other_trend, sig_F_other_trend);
     dlambda_trend ~ normal(mu_dlambda_trend, sig_dlambda_trend);
     if (include_trend == 1) {
         // Score the observed T/N pair in the selected orientation. The same
