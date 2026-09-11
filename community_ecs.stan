@@ -2,44 +2,47 @@
 
     Core lines of evidence:
 
-      L_proc    process understanding: aggregate Gaussian on the
-                total 2xCO2 feedback, lambda = -F_2xCO2/S, formed as the
-                sum of component feedbacks.
+      L_proc          process understanding: aggregate Gaussian on the
+                      total 2xCO2 feedback, lambda = -F_2xCO2/S, formed as the
+                      sum of component feedbacks.
 
-      L_hist    historical warming and TOA imbalance with pattern effect:
-                N = F + (lambda - dlambda)*T.
-                Historical forcing is decomposed as
-                F = F_CO2 + F_anthro_aerosol + F_other, with
-                F_CO2 proportional to the shared F_2xCO2 parameter.
+      L_instrumental  instrumental warming and TOA imbalance with pattern
+                      effect:
+                      N = F + (lambda - dlambda_instrumental)*T.
+                      Instrumental forcing is decomposed as
+                      F = F_CO2 + F_anthro_aerosol + F_other, with
+                      F_CO2 proportional to the shared F_2xCO2 parameter.
 
-      L_trend   2006--2024 trends in temperature, effective radiative forcing,
-                and TOA imbalance:
-                N_trend = F_trend + (lambda - dlambda_trend)*T_trend.
-                Trend forcing is decomposed as
-                F_trend = F_CO2_trend + F_anthro_aerosol_trend
-                          + F_other_trend, with F_CO2_trend proportional to
-                          the shared F_2xCO2 parameter.
-                Matching historical and Trend aerosol components have an
-                assessed cross-period covariance, as do the matching
-                residual-other forcing components. The Trend T and N
-                observations retain their assessed within-period covariance.
-                This evidence is included in the current community baseline.
-                It is not fully independent of L_hist: shared forcing errors
-                are modeled below, while the remaining cross-period error
-                covariances are currently treated as negligible.
+      L_trend         2006--2024 trends in temperature, effective radiative
+                      forcing, and TOA imbalance:
+                      N_trend = F_trend
+                                + (lambda - dlambda_trend)*T_trend.
+                      Trend forcing is decomposed as
+                      F_trend = F_CO2_trend + F_anthro_aerosol_trend
+                                + F_other_trend, with F_CO2_trend proportional
+                                to the shared F_2xCO2 parameter.
+                      Matching instrumental and Trend aerosol components have
+                      an assessed cross-period covariance, as do the matching
+                      residual-other forcing components. The Trend T and N
+                      observations retain their assessed within-period
+                      covariance. This evidence is included in the current
+                      community baseline. It is not fully independent of
+                      L_instrumental: shared forcing errors are modeled below,
+                      while the remaining cross-period error covariances are
+                      currently treated as negligible.
 
-      L_LGM     Last Glacial Maximum budget residual:
-                N_LGM = F_other_LGM + f_CO2_LGM*F_2xCO2
-                        + T_LGM*(lambda - dlambda_LGM).
-                The signed dimensionless multiplier f_CO2_LGM is sampled,
-                so the LGM CO2 forcing inherits uncertainty from both the
-                shared F_2xCO2 and forcing state dependence.
+      L_LGM           Last Glacial Maximum budget residual:
+                      N_LGM = F_other_LGM + f_CO2_LGM*F_2xCO2
+                              + T_LGM*(lambda - dlambda_LGM).
+                      The signed dimensionless multiplier f_CO2_LGM is sampled,
+                      so the LGM CO2 forcing inherits uncertainty from both the
+                      shared F_2xCO2 and forcing state dependence.
 
-      L_plio    Pliocene (mid-Piacenzian Warm Period) budget residual:
-                N_plio = F_plio_CO2*(1+fCH4) + F_plio_nonGHG
-                         + T_plio*(lambda - dlambda_plio),
-                where F_plio_CO2 is the Meinshausen et al. (2020) CO2
-                concentration-forcing ratio times the shared F_2xCO2.
+      L_plio          Pliocene (mid-Piacenzian Warm Period) budget residual:
+                      N_plio = F_plio_CO2*(1+fCH4) + F_plio_nonGHG
+                               + T_plio*(lambda - dlambda_plio),
+                      where F_plio_CO2 is the Meinshausen et al. (2020) CO2
+                      concentration-forcing ratio times the shared F_2xCO2.
 
     Sampled shared parameters: lambda and F_2xCO2. ECS is the
     transformed output S = -F_2xCO2/lambda.
@@ -56,8 +59,9 @@
                                        lambda and F_2xCO2
                                     1: correlated bivariate Gaussian;
                                        requires include_process = 1
-      include_historical       = 0: omit the historical energy-budget likelihood
-                                 1: include it
+      include_instrumental      = 0: omit the instrumental energy-budget
+                                    likelihood
+                                  1: include it
       include_trend            = 0: omit the recent-trend likelihood
                                  1: include it (community baseline)
       include_lgm              = 0: omit the LGM energy-budget likelihood
@@ -67,7 +71,7 @@
       use_score_T              = 0: new default, evaluate model N=F+lambda*T
                                  1: rearrange every energy budget and
                                     evaluate model T=(N-F)/lambda.
-      use_pattern_effect_copula = 0: skew-normal historical pattern effect,
+      use_pattern_effect_copula = 0: skew-normal instrumental pattern effect,
                                      correlated Gaussian LGM/Pliocene effects
                                   1: three-way Gaussian copula preserving those
                                      three marginal distributions
@@ -78,9 +82,9 @@
     marginalization, those disconnected nuisance variables contribute only a
     constant and cannot change the posterior of S, lambda, or F_2xCO2.
 
-    CAUTION: the recent Trend interval overlaps the historical record. The
+    CAUTION: the recent Trend interval overlaps the instrumental record. The
     model includes the assessed cross-period forcing covariance, but no
-    historical-Trend covariance for temperature, TOA imbalance, pattern
+    instrumental-Trend covariance for temperature, TOA imbalance, pattern
     effects, or other errors. That is an explicit sensitivity assumption, not
     a claim that the two lines of evidence are otherwise independent.
 
@@ -125,18 +129,19 @@
     not require an additional Jacobian term.
 
 
-    --- historical/Trend forcing correlation with F_2xCO2 --------------------
+    --- instrumental/Trend forcing correlation with F_2xCO2 -----------------
 
-    We decompose F_hist into a CO2 component (which is proportional to
+    We decompose F_instrumental into a CO2 component (which is proportional to
     F_2xCO2) and non-CO2 components independent of F_2xCO2, to
-    preserve the F_hist / F_2xCO2 correlation. Here the non-CO2 term is split
-    further into anthropogenic aerosol (ERFari + ERFaci) and residual other forcing
-    so that aerosol forcing can be diagnosed and varied explicitly.
+    preserve the F_instrumental / F_2xCO2 correlation. Here the non-CO2 term
+    is split further into anthropogenic aerosol (ERFari + ERFaci) and residual
+    other forcing so that aerosol forcing can be diagnosed and varied
+    explicitly.
 
     The recent-Trend forcing uses the same construction: its CO2 component is
     proportional to F_2xCO2, while its anthropogenic aerosol (ARI + ACI) and
     residual-other components are jointly distributed with the matching
-    historical components using their assessed covariances. The native CO2
+    instrumental components using their assessed covariances. The native CO2
     ensemble spread is not added separately, which would double count the
     shared radiative-efficiency uncertainty.
 */
@@ -184,7 +189,7 @@ data {
 
     // Line-of-evidence switches.
     int<lower=0, upper=1> include_process;
-    int<lower=0, upper=1> include_historical;
+    int<lower=0, upper=1> include_instrumental;
     int<lower=0, upper=1> include_trend;
     int<lower=0, upper=1> include_lgm;
     int<lower=0, upper=1> include_pliocene;
@@ -209,28 +214,28 @@ data {
     // Negative means larger forcing accompanies more-negative lambda.
     real<lower=-1, upper=1> rho_lambda_F2x;
 
-    // ---- Historical evidence ----
-    real          mu_T_hist;
-    real<lower=0> sig_T_hist;
+    // ---- Instrumental evidence ----
+    real          mu_T_instrumental;
+    real<lower=0> sig_T_instrumental;
 
-    real          mu_N_hist;
-    real<lower=0> sig_N_hist;
+    real          mu_N_instrumental;
+    real<lower=0> sig_N_instrumental;
 
-    // Central historical CO2 forcing evaluated at erf_2x. Its uncertainty
+    // Central instrumental CO2 forcing evaluated at erf_2x. Its uncertainty
     // is inherited from the shared F_2xCO2 draw.
-    real          mu_F_CO2_hist;
+    real          mu_F_CO2_instrumental;
 
-    real          mu_F_anthro_aerosol_hist;
-    real<lower=0> sig_F_anthro_aerosol_hist;
+    real          mu_F_anthro_aerosol_instrumental;
+    real<lower=0> sig_F_anthro_aerosol_instrumental;
 
-    real          mu_F_other_hist;
-    real<lower=0> sig_F_other_hist;
+    real          mu_F_other_instrumental;
+    real<lower=0> sig_F_other_instrumental;
 
-    // Historical pattern-effect prior: skew-normal(location, scale, shape).
+    // Instrumental pattern-effect prior: skew-normal(location, scale, shape).
     // Note: shape=0 gives normal(mean=loc, sd=scale), so var=scale^2.
-    real          loc_dlambda;
-    real<lower=0> scale_dlambda;
-    real          shape_dlambda;
+    real          loc_dlambda_instrumental;
+    real<lower=0> scale_dlambda_instrumental;
+    real          shape_dlambda_instrumental;
 
     // ---- Recent Trend (2006--2024; all trends are per decade) ----
     real          mu_T_trend;
@@ -252,13 +257,13 @@ data {
     real          mu_F_other_trend;
     real<lower=0> sig_F_other_trend;
 
-    // Final assessed covariance between the historical change and recent
+    // Final assessed covariance between the instrumental change and recent
     // trend for each non-CO2 forcing component. Its construction, including
     // structural-error sensitivity choices, is handled before data are passed
     // to Stan. Units are
     // (W m^-2)(W m^-2 decade^-1).
-    real cov_F_anthro_aerosol_hist_trend;
-    real cov_F_other_hist_trend;
+    real cov_F_anthro_aerosol_instrumental_trend;
+    real cov_F_other_instrumental_trend;
 
     real          mu_dlambda_trend;
     real<lower=0> sig_dlambda_trend;
@@ -297,10 +302,10 @@ data {
     real          mu_dlambda_plio;
     real<lower=0> sig_dlambda_plio;
 
-    // Pattern-effect correlations. The historical correlations are used only
+    // Pattern-effect correlations. The instrumental correlations are used only
     // by the copula; rho_dlambda_LGM_plio is used by both pattern-prior modes.
-    real<lower=-1, upper=1> rho_dlambda_hist_LGM;
-    real<lower=-1, upper=1> rho_dlambda_hist_plio;
+    real<lower=-1, upper=1> rho_dlambda_instrumental_LGM;
+    real<lower=-1, upper=1> rho_dlambda_instrumental_plio;
     real<lower=-1, upper=1> rho_dlambda_LGM_plio;
 
     real          mu_fCH4;
@@ -315,10 +320,10 @@ transformed data {
     matrix[2, 2] L_lambda_F2x;
     matrix[2, 2] cov_TN_trend_matrix;
     matrix[2, 2] L_TN_trend;
-    matrix[2, 2] cov_F_anthro_aerosol_hist_trend_matrix;
-    matrix[2, 2] L_F_anthro_aerosol_hist_trend;
-    matrix[2, 2] cov_F_other_hist_trend_matrix;
-    matrix[2, 2] L_F_other_hist_trend;
+    matrix[2, 2] cov_F_anthro_aerosol_instrumental_trend_matrix;
+    matrix[2, 2] L_F_anthro_aerosol_instrumental_trend;
+    matrix[2, 2] cov_F_other_instrumental_trend_matrix;
+    matrix[2, 2] L_F_other_instrumental_trend;
     matrix[3, 3] R_dlambda_copula;
     matrix[3, 3] L_dlambda_copula;
 
@@ -368,56 +373,58 @@ transformed data {
         L_TN_trend = diag_matrix(rep_vector(1.0, 2));
     }
 
-    if (include_historical == 1 && include_trend == 1) {
-        if (abs(cov_F_anthro_aerosol_hist_trend)
-            >= sig_F_anthro_aerosol_hist * sig_F_anthro_aerosol_trend)
-            reject("Historical/Trend aerosol forcing covariance matrix must be ",
+    if (include_instrumental == 1 && include_trend == 1) {
+        if (abs(cov_F_anthro_aerosol_instrumental_trend)
+            >= sig_F_anthro_aerosol_instrumental * sig_F_anthro_aerosol_trend)
+            reject("Instrumental/Trend aerosol forcing covariance matrix must be ",
                    "positive definite.");
-        if (abs(cov_F_other_hist_trend)
-            >= sig_F_other_hist * sig_F_other_trend)
-            reject("Historical/Trend residual-other forcing covariance matrix ",
+        if (abs(cov_F_other_instrumental_trend)
+            >= sig_F_other_instrumental * sig_F_other_trend)
+            reject("Instrumental/Trend residual-other forcing covariance matrix ",
                    "must be positive definite.");
 
-        cov_F_anthro_aerosol_hist_trend_matrix[1, 1]
-            = square(sig_F_anthro_aerosol_hist);
-        cov_F_anthro_aerosol_hist_trend_matrix[2, 2]
+        cov_F_anthro_aerosol_instrumental_trend_matrix[1, 1]
+            = square(sig_F_anthro_aerosol_instrumental);
+        cov_F_anthro_aerosol_instrumental_trend_matrix[2, 2]
             = square(sig_F_anthro_aerosol_trend);
-        cov_F_anthro_aerosol_hist_trend_matrix[1, 2]
-            = cov_F_anthro_aerosol_hist_trend;
-        cov_F_anthro_aerosol_hist_trend_matrix[2, 1]
-            = cov_F_anthro_aerosol_hist_trend;
-        L_F_anthro_aerosol_hist_trend = cholesky_decompose(
-            cov_F_anthro_aerosol_hist_trend_matrix
+        cov_F_anthro_aerosol_instrumental_trend_matrix[1, 2]
+            = cov_F_anthro_aerosol_instrumental_trend;
+        cov_F_anthro_aerosol_instrumental_trend_matrix[2, 1]
+            = cov_F_anthro_aerosol_instrumental_trend;
+        L_F_anthro_aerosol_instrumental_trend = cholesky_decompose(
+            cov_F_anthro_aerosol_instrumental_trend_matrix
         );
 
-        cov_F_other_hist_trend_matrix[1, 1] = square(sig_F_other_hist);
-        cov_F_other_hist_trend_matrix[2, 2] = square(sig_F_other_trend);
-        cov_F_other_hist_trend_matrix[1, 2] = cov_F_other_hist_trend;
-        cov_F_other_hist_trend_matrix[2, 1] = cov_F_other_hist_trend;
-        L_F_other_hist_trend = cholesky_decompose(
-            cov_F_other_hist_trend_matrix
+        cov_F_other_instrumental_trend_matrix[1, 1]
+            = square(sig_F_other_instrumental);
+        cov_F_other_instrumental_trend_matrix[2, 2] = square(sig_F_other_trend);
+        cov_F_other_instrumental_trend_matrix[1, 2] = cov_F_other_instrumental_trend;
+        cov_F_other_instrumental_trend_matrix[2, 1] = cov_F_other_instrumental_trend;
+        L_F_other_instrumental_trend = cholesky_decompose(
+            cov_F_other_instrumental_trend_matrix
         );
     } else {
         // The covariance does not affect either marginal when only one line is
         // enabled, so use independent normalized priors for better sampling.
-        cov_F_anthro_aerosol_hist_trend_matrix
+        cov_F_anthro_aerosol_instrumental_trend_matrix
             = diag_matrix(rep_vector(1.0, 2));
-        L_F_anthro_aerosol_hist_trend = diag_matrix(rep_vector(1.0, 2));
-        cov_F_other_hist_trend_matrix = diag_matrix(rep_vector(1.0, 2));
-        L_F_other_hist_trend = diag_matrix(rep_vector(1.0, 2));
+        L_F_anthro_aerosol_instrumental_trend
+            = diag_matrix(rep_vector(1.0, 2));
+        cov_F_other_instrumental_trend_matrix = diag_matrix(rep_vector(1.0, 2));
+        L_F_other_instrumental_trend = diag_matrix(rep_vector(1.0, 2));
     }
 
     R_dlambda_copula = diag_matrix(rep_vector(1.0, 3));
-    R_dlambda_copula[1, 2] = rho_dlambda_hist_LGM;
-    R_dlambda_copula[2, 1] = rho_dlambda_hist_LGM;
-    R_dlambda_copula[1, 3] = rho_dlambda_hist_plio;
-    R_dlambda_copula[3, 1] = rho_dlambda_hist_plio;
+    R_dlambda_copula[1, 2] = rho_dlambda_instrumental_LGM;
+    R_dlambda_copula[2, 1] = rho_dlambda_instrumental_LGM;
+    R_dlambda_copula[1, 3] = rho_dlambda_instrumental_plio;
+    R_dlambda_copula[3, 1] = rho_dlambda_instrumental_plio;
     R_dlambda_copula[2, 3] = rho_dlambda_LGM_plio;
     R_dlambda_copula[3, 2] = rho_dlambda_LGM_plio;
 
     if (use_pattern_effect_copula == 1) {
         if (determinant(R_dlambda_copula) <= 0)
-            reject("Historical/LGM/Pliocene pattern-effect correlation matrix ",
+            reject("Instrumental/LGM/Pliocene pattern-effect correlation matrix ",
                    "must be positive definite.");
         L_dlambda_copula = cholesky_decompose(R_dlambda_copula);
     } else {
@@ -437,12 +444,12 @@ parameters {
     // S = -F_2xCO2/lamb and enforce the physical lamb < 0 domain.
     real<lower=-F_2xCO2 / 0.05, upper=-F_2xCO2 / 20> lamb;
 
-    // historical nuisance parameters
-    real F_anthro_aerosol_hist;
-    real F_other_hist;
-    real T_hist;
-    real N_hist_scoreT;
-    real dlambda;
+    // Instrumental nuisance parameters
+    real F_anthro_aerosol_instrumental;
+    real F_other_instrumental;
+    real T_instrumental;
+    real N_instrumental_scoreT;
+    real dlambda_instrumental;
 
     // LGM nuisance
     real T_LGM;
@@ -470,10 +477,10 @@ transformed parameters{
 
     // These are dependent parameters that are a function of the independent parameters
     real S;        // equilibrium climate sensitivity
-    real F_CO2_hist;
-    real F_hist;
-    real N_hist;
-    real T_hist_scoreT;
+    real F_CO2_instrumental;
+    real F_instrumental;
+    real N_instrumental;
+    real T_instrumental_scoreT;
     real F_CO2_trend;
     real F_trend;
     real N_trend;
@@ -491,20 +498,24 @@ transformed parameters{
     // ECS derived from the directly sampled feedback parameter.
     S = -F_2xCO2 / lamb;
 
-    // Historical CO2 forcing shares the same radiative-efficiency uncertainty
-    // as F_2xCO2. At F_2xCO2 = erf_2x its central value is mu_F_CO2_hist.
-    F_CO2_hist = mu_F_CO2_hist * F_2xCO2 / erf_2x;
-    F_hist = F_CO2_hist + F_anthro_aerosol_hist + F_other_hist;
+    // Instrumental CO2 forcing shares the same radiative-efficiency uncertainty
+    // as F_2xCO2. At F_2xCO2 = erf_2x its central value is mu_F_CO2_instrumental.
+    F_CO2_instrumental = mu_F_CO2_instrumental * F_2xCO2 / erf_2x;
+    F_instrumental = F_CO2_instrumental
+                     + F_anthro_aerosol_instrumental
+                     + F_other_instrumental;
 
     // coupling equations
-    N_hist  = F_hist + T_hist * (lamb - dlambda);
-    if (abs(lamb - dlambda) > score_T_min_abs_feedback)
-        T_hist_scoreT = (N_hist_scoreT - F_hist) / (lamb - dlambda);
+    N_instrumental = F_instrumental
+                     + T_instrumental * (lamb - dlambda_instrumental);
+    if (abs(lamb - dlambda_instrumental) > score_T_min_abs_feedback)
+        T_instrumental_scoreT = (N_instrumental_scoreT - F_instrumental)
+                                / (lamb - dlambda_instrumental);
     else
-        T_hist_scoreT = 0;
+        T_instrumental_scoreT = 0;
 
     // The Trend CO2 forcing shares the same uncertainty as F_2xCO2, which
-    // automatically supplies its covariance with historical CO2 forcing.
+    // automatically supplies its covariance with instrumental CO2 forcing.
     // Aerosol and residual-other forcing are separate nuisance pairs.
     F_CO2_trend = mu_F_CO2_trend * F_2xCO2 / erf_2x;
     F_trend = F_CO2_trend + F_anthro_aerosol_trend + F_other_trend;
@@ -564,55 +575,61 @@ model {
         F_2xCO2 ~ normal(erf_2x, sig_F2xCO2);
     }
 
-    // Historical/Trend component-forcing priors. When both lines are enabled,
+    // Instrumental/Trend component-forcing priors. When both lines are enabled,
     // preserve the supplied covariance for each matching component.
     // Cross-component covariance remains negligible and is not included.
-    if (include_historical == 1 && include_trend == 1) {
-        vector[2] F_anthro_aerosol_hist_trend;
-        vector[2] mu_F_anthro_aerosol_hist_trend;
-        vector[2] F_other_hist_trend;
-        vector[2] mu_F_other_hist_trend;
+    if (include_instrumental == 1 && include_trend == 1) {
+        vector[2] F_anthro_aerosol_instrumental_trend;
+        vector[2] mu_F_anthro_aerosol_instrumental_trend;
+        vector[2] F_other_instrumental_trend;
+        vector[2] mu_F_other_instrumental_trend;
 
-        F_anthro_aerosol_hist_trend[1] = F_anthro_aerosol_hist;
-        F_anthro_aerosol_hist_trend[2] = F_anthro_aerosol_trend;
-        mu_F_anthro_aerosol_hist_trend[1] = mu_F_anthro_aerosol_hist;
-        mu_F_anthro_aerosol_hist_trend[2] = mu_F_anthro_aerosol_trend;
-        F_anthro_aerosol_hist_trend ~ multi_normal_cholesky(
-            mu_F_anthro_aerosol_hist_trend,
-            L_F_anthro_aerosol_hist_trend
+        F_anthro_aerosol_instrumental_trend[1] = F_anthro_aerosol_instrumental;
+        F_anthro_aerosol_instrumental_trend[2] = F_anthro_aerosol_trend;
+        mu_F_anthro_aerosol_instrumental_trend[1]
+            = mu_F_anthro_aerosol_instrumental;
+        mu_F_anthro_aerosol_instrumental_trend[2] = mu_F_anthro_aerosol_trend;
+        F_anthro_aerosol_instrumental_trend ~ multi_normal_cholesky(
+            mu_F_anthro_aerosol_instrumental_trend,
+            L_F_anthro_aerosol_instrumental_trend
         );
 
-        F_other_hist_trend[1] = F_other_hist;
-        F_other_hist_trend[2] = F_other_trend;
-        mu_F_other_hist_trend[1] = mu_F_other_hist;
-        mu_F_other_hist_trend[2] = mu_F_other_trend;
-        F_other_hist_trend ~ multi_normal_cholesky(
-            mu_F_other_hist_trend, L_F_other_hist_trend
+        F_other_instrumental_trend[1] = F_other_instrumental;
+        F_other_instrumental_trend[2] = F_other_trend;
+        mu_F_other_instrumental_trend[1] = mu_F_other_instrumental;
+        mu_F_other_instrumental_trend[2] = mu_F_other_trend;
+        F_other_instrumental_trend ~ multi_normal_cholesky(
+            mu_F_other_instrumental_trend, L_F_other_instrumental_trend
         );
     } else {
-        F_anthro_aerosol_hist ~ normal(
-            mu_F_anthro_aerosol_hist, sig_F_anthro_aerosol_hist
+        F_anthro_aerosol_instrumental ~ normal(
+            mu_F_anthro_aerosol_instrumental,
+            sig_F_anthro_aerosol_instrumental
         );
         F_anthro_aerosol_trend ~ normal(
             mu_F_anthro_aerosol_trend, sig_F_anthro_aerosol_trend
         );
-        F_other_hist ~ normal(mu_F_other_hist, sig_F_other_hist);
+        F_other_instrumental ~ normal(
+            mu_F_other_instrumental, sig_F_other_instrumental
+        );
         F_other_trend ~ normal(mu_F_other_trend, sig_F_other_trend);
     }
 
-    // Historical
-    T_hist  ~ normal(mu_T_hist , sig_T_hist);
-    N_hist_scoreT ~ normal(mu_N_hist, sig_N_hist);
-    if (include_historical == 1) {
+    // Instrumental
+    T_instrumental ~ normal(mu_T_instrumental, sig_T_instrumental);
+    N_instrumental_scoreT ~ normal(mu_N_instrumental, sig_N_instrumental);
+    if (include_instrumental == 1) {
         if (use_score_T == 1) {
-            if (abs(lamb - dlambda) > score_T_min_abs_feedback
-                && value_is_finite(T_hist_scoreT))
-                T_hist_scoreT ~ normal(mu_T_hist, sig_T_hist);
+            if (abs(lamb - dlambda_instrumental) > score_T_min_abs_feedback
+                && value_is_finite(T_instrumental_scoreT))
+                T_instrumental_scoreT ~ normal(
+                    mu_T_instrumental, sig_T_instrumental
+                );
             else
                 target += negative_infinity();
         } else {
-            if (value_is_finite(N_hist))
-                N_hist ~ normal(mu_N_hist, sig_N_hist);
+            if (value_is_finite(N_instrumental))
+                N_instrumental ~ normal(mu_N_instrumental, sig_N_instrumental);
             else
                 target += negative_infinity();
         }
@@ -708,24 +725,26 @@ model {
         // The marginal-density terms preserve the requested skew-normal and
         // Gaussian priors; the density ratio adds the Gaussian copula.
         vector[3] z_dlambda;
-        real p_hist;
+        real p_instrumental;
 
-        p_hist = fmin(
+        p_instrumental = fmin(
             1 - 1e-12,
             fmax(
                 1e-12,
                 skew_normal_cdf(
-                    dlambda | loc_dlambda, scale_dlambda, shape_dlambda
+                    dlambda_instrumental | loc_dlambda_instrumental,
+                    scale_dlambda_instrumental, shape_dlambda_instrumental
                 )
             )
         );
 
-        z_dlambda[1] = inv_Phi(p_hist);
+        z_dlambda[1] = inv_Phi(p_instrumental);
         z_dlambda[2] = (dlambda_LGM - mu_dlambda_LGM) / sig_dlambda_LGM;
         z_dlambda[3] = (dlambda_plio - mu_dlambda_plio) / sig_dlambda_plio;
 
         target += skew_normal_lpdf(
-            dlambda | loc_dlambda, scale_dlambda, shape_dlambda
+            dlambda_instrumental | loc_dlambda_instrumental,
+            scale_dlambda_instrumental, shape_dlambda_instrumental
         );
         target += normal_lpdf(
             dlambda_LGM | mu_dlambda_LGM, sig_dlambda_LGM
@@ -742,7 +761,11 @@ model {
         vector[2] mu_dlambda_pair;
         matrix[2, 2] cov_dlambda_pair;
 
-        dlambda ~ skew_normal(loc_dlambda, scale_dlambda, shape_dlambda);
+        dlambda_instrumental ~ skew_normal(
+            loc_dlambda_instrumental,
+            scale_dlambda_instrumental,
+            shape_dlambda_instrumental
+        );
 
         dlambda_pair[1] = dlambda_LGM;
         dlambda_pair[2] = dlambda_plio;
