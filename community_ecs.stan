@@ -106,9 +106,9 @@
 
     --- prior choice (sec. 7.2) -----------------------------------------------
 
-    The model samples lambda directly and reports S = -F_2xCO2/lambda as a
-    transformed parameter. The lambda bounds depend on F_2xCO2 so that they
-    preserve the 0.05 <= S <= 20 K support.
+    The model samples lambda directly on the fixed interval
+    -100 <= lambda <= -0.01 W m^-2 K^-1 and reports S = -F_2xCO2/lambda
+    as a transformed parameter. Since F_2xCO2 varies, S has no fixed bounds.
 
     *Uniform lambda*
     Direct sampling supplies the uniform-lambda measure without an additional
@@ -117,9 +117,11 @@
     *Uniform S*
     The change of variables has
         |dS/dlambda| = F_2xCO2/lambda^2.
-    Therefore the uniform-S option adds
-        target += log(F_2xCO2) - 2*log(-lambda)
-    to the density expressed in the sampled (lambda, F_2xCO2) coordinates.
+    With fixed lambda bounds, the allowed S interval is
+    [F_2xCO2/100, F_2xCO2/0.01] and its width is proportional to F_2xCO2.
+    Normalizing the uniform-S density conditional on F_2xCO2 cancels that
+    factor, leaving
+        target += -2*log(-lambda).
 
     *Reflected lognormal lambda*
     A conventional lognormal distribution cannot be defined on negative
@@ -437,12 +439,11 @@ transformed data {
 }
 parameters {
     // The sampling space: the independent parameters that are Monte Carlo sampled
-    // A tiny positive numerical floor prevents an underflowed warmup proposal
-    // from collapsing the two F-dependent bounds on lamb to the same value.
+    // A tiny positive numerical floor keeps the sampled CO2 forcing and S positive.
     real<lower=1e-6> F_2xCO2;
-    // These F-dependent bounds preserve 0.05 <= S <= 20 under
-    // S = -F_2xCO2/lamb and enforce the physical lamb < 0 domain.
-    real<lower=-F_2xCO2 / 0.05, upper=-F_2xCO2 / 20> lamb;
+    // Fixed lambda support removes the forcing-dependent prior interval width.
+    // Under S = -F_2xCO2/lamb, the corresponding S bounds vary with F_2xCO2.
+    real<lower=-100, upper=-0.01> lamb;
 
     // Instrumental nuisance parameters
     real F_anthro_aerosol_instrumental;
@@ -780,11 +781,12 @@ model {
         dlambda_pair ~ multi_normal(mu_dlambda_pair, cov_dlambda_pair);
     }
 
-    // Direct sampling gives the uniform-lambda measure by default. The other
-    // choices add their density in the sampled lambda coordinates. This remains
+    // Direct sampling gives the uniform-lambda measure by default. With
+    // fixed lambda bounds, the normalized conditional uniform-S density
+    // is proportional to 1/lamb^2: its F_2xCO2 factors cancel. This remains
     // selectable whether or not the Process likelihood is included.
     if (lambda_prior_type == 0) {
-        target += log(F_2xCO2) - 2 * log(-lamb);
+        target += -2 * log(-lamb);
     } else if (lambda_prior_type == 2) {
         target += lognormal_lpdf(
             -lamb | log(lognormal_r_median), lognormal_r_log_sigma
