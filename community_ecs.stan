@@ -3,7 +3,7 @@
     Core lines of evidence:
 
       L_proc          process understanding: aggregate Gaussian on the
-                      total 2xCO2 feedback, lambda = -F_2xCO2/S, formed as the
+                      total 2xCO2 feedback, lambda = -F_2xCO2/ECS, formed as the
                       sum of component feedbacks.
 
       L_instrumental  instrumental warming and TOA imbalance with pattern
@@ -44,11 +44,11 @@
                       where F_plio_CO2 is the Meinshausen et al. (2020) CO2
                       concentration-forcing ratio times the shared F_2xCO2.
 
-    Sampled shared parameters: lambda and F_2xCO2. ECS is the
-    transformed output S = -F_2xCO2/lambda.
+    Sampled shared parameters: lambda and F_2xCO2. The transformed output is
+    ECS = -F_2xCO2/lambda.
 
     Model settings (all are fixed during a fit):
-      lambda_prior_type        = 0: uniform-S prior (US)
+      lambda_prior_type        = 0: uniform-ECS prior (UECS)
                                  1: uniform-lambda prior (UL)
                                  2: reflected-lognormal lambda prior, defined
                                     on the positive damping r = -lambda
@@ -80,7 +80,7 @@
     its nuisance variables retain normalized, proper distributions. This
     keeps one fixed parameter interface for every switch combination. After
     marginalization, those disconnected nuisance variables contribute only a
-    constant and cannot change the posterior of S, lambda, or F_2xCO2.
+    constant and cannot change the posterior of ECS, lambda, or F_2xCO2.
 
     CAUTION: the recent Trend interval overlaps the instrumental record. The
     model includes the assessed cross-period forcing covariance, but no
@@ -107,19 +107,19 @@
     --- prior choice (sec. 7.2) -----------------------------------------------
 
     The model samples lambda directly on the fixed interval
-    -100 <= lambda <= -0.01 W m^-2 K^-1 and reports S = -F_2xCO2/lambda
-    as a transformed parameter. Since F_2xCO2 varies, S has no fixed bounds.
+    -100 <= lambda <= -0.01 W m^-2 K^-1 and reports ECS = -F_2xCO2/lambda
+    as a transformed parameter. Since F_2xCO2 varies, ECS has no fixed bounds.
 
     *Uniform lambda*
     Direct sampling supplies the uniform-lambda measure without an additional
     target adjustment to specify a non-uniform prior.
     
-    *Uniform S*
+    *Uniform ECS*
     The change of variables has
-        |dS/dlambda| = F_2xCO2/lambda^2.
-    With fixed lambda bounds, the allowed S interval is
+        |dECS/dlambda| = F_2xCO2/lambda^2.
+    With fixed lambda bounds, the allowed ECS interval is
     [F_2xCO2/100, F_2xCO2/0.01] and its width is proportional to F_2xCO2.
-    Normalizing the uniform-S density conditional on F_2xCO2 cancels that
+    Normalizing the uniform-ECS density conditional on F_2xCO2 cancels that
     factor, leaving
         target += -2*log(-lambda).
 
@@ -180,7 +180,7 @@ functions {
 
 
 data {
-    // Prior choice: 0 = US, 1 = UL, 2 = lognormal(-lambda). This is
+    // Prior choice: 0 = UECS, 1 = UL, 2 = lognormal(-lambda). This is
     // independent of all line-of-evidence switches.
     int<lower=0, upper=2> lambda_prior_type;
 
@@ -439,10 +439,10 @@ transformed data {
 }
 parameters {
     // The sampling space: the independent parameters that are Monte Carlo sampled
-    // A tiny positive numerical floor keeps the sampled CO2 forcing and S positive.
+    // A tiny positive numerical floor keeps the sampled CO2 forcing and ECS positive.
     real<lower=1e-6> F_2xCO2;
     // Fixed lambda support removes the forcing-dependent prior interval width.
-    // Under S = -F_2xCO2/lamb, the corresponding S bounds vary with F_2xCO2.
+    // Under ECS = -F_2xCO2/lamb, the corresponding ECS bounds vary with F_2xCO2.
     real<lower=-100, upper=-0.01> lamb;
 
     // Instrumental nuisance parameters
@@ -477,7 +477,7 @@ parameters {
 transformed parameters{
 
     // These are dependent parameters that are a function of the independent parameters
-    real S;        // equilibrium climate sensitivity
+    real ECS;      // equilibrium climate sensitivity
     real F_CO2_instrumental;
     real F_instrumental;
     real N_instrumental;
@@ -497,7 +497,7 @@ transformed parameters{
     // parameter formulas
     
     // ECS derived from the directly sampled feedback parameter.
-    S = -F_2xCO2 / lamb;
+    ECS = -F_2xCO2 / lamb;
 
     // Instrumental CO2 forcing shares the same radiative-efficiency uncertainty
     // as F_2xCO2. At F_2xCO2 = erf_2x its central value is mu_F_CO2_instrumental.
@@ -782,7 +782,7 @@ model {
     }
 
     // Direct sampling gives the uniform-lambda measure by default. With
-    // fixed lambda bounds, the normalized conditional uniform-S density
+    // fixed lambda bounds, the normalized conditional uniform-ECS density
     // is proportional to 1/lamb^2: its F_2xCO2 factors cancel. This remains
     // selectable whether or not the Process likelihood is included.
     if (lambda_prior_type == 0) {
